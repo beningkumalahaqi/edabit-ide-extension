@@ -144,6 +144,7 @@ const state = {
   fontSize: 15,
   completions: true,
   smooth: true,
+  diagnostics: true,
   open: false,
 };
 
@@ -169,6 +170,10 @@ let paletteResults = null;
 let paletteCommands = [];
 let paletteIndex = 0;
 let paletteMode = 'command';
+let diagnostics = [];
+let diagnosticsTimer = null;
+let diagnosticHost = null;
+let lastCheckedText = null;
 
 function findEditor() {
   const content = document.querySelector('#challenge-code-editor .cm-content')
@@ -200,6 +205,7 @@ function loadSettings() {
       if (Number.isFinite(saved.fontSize)) state.fontSize = Math.min(24, Math.max(12, saved.fontSize));
       if (typeof saved.completions === 'boolean') state.completions = saved.completions;
       if (typeof saved.smooth === 'boolean') state.smooth = saved.smooth;
+      if (typeof saved.diagnostics === 'boolean') state.diagnostics = saved.diagnostics;
     }
   } catch {
     /* ignore unreadable settings */
@@ -215,6 +221,7 @@ function saveSettings() {
       fontSize: state.fontSize,
       completions: state.completions,
       smooth: state.smooth,
+      diagnostics: state.diagnostics,
     }));
   } catch {
     /* storage can be unavailable in private mode */
@@ -231,7 +238,10 @@ function applySettings(force = false) {
   editorEl.style.setProperty('--edx-font-size', `${state.fontSize}px`);
   if (changed) {
     appliedKey = key;
-    requestAnimationFrame(() => view?.requestMeasure?.());
+    requestAnimationFrame(() => {
+      view?.requestMeasure?.();
+      renderDiagnosticOverlay();
+    });
   }
 }
 
@@ -335,6 +345,7 @@ function applySnippet(from, to, body) {
   } else {
     snippetSession = null;
   }
+  scheduleDiagnostics();
 }
 
 function insertSnippet(text) {
@@ -391,8 +402,480 @@ function advanceSnippet() {
   return true;
 }
 
-function createToolbar() {
-  host = document.createElement('div');
+const BRACKET_MATCH = { ')': '(', ']': '[', '}': '{' };
+const BRACKET_CLOSE = { '(': ')', '[': ']', '{': '}' };
+
+function commentTokensFor(lang) {
+  if (lang === 'python' || lang === 'ruby') return ['#'];
+  if (lang === 'php') return ['#', '//'];
+  return ['//'];
+}
+
+function regexAllowedBefore(text, index) {
+  let cursor = index - 1;
+  while (cursor >= 0 && /\s/.test(text[cursor])) cursor -= 1;
+  if (cursor < 0) return true;
+  if ('([{=,:;!&|?+-*%^~<>'.includes(text[cursor])) return true;
+  const before = text.slice(Math.max(0, cursor - 9), cursor + 1);
+  return /\b(?:return|case|typeof|delete|void|new|yield|await|in|of)$/.test(before);
+}
+
+function scanSyntax(text, lang) {
+  const found = [];
+  const strings = [];
+  const stack = [];
+  const comments = commentTokensFor(lang);
+  const blockComments = lang !== 'python' && lang !== 'ruby';
+  const quotes = lang === 'javascript' ? ['"', "'", '`'] : ['"', "'"];
+  const length = text.length;
+  let index = 0;
+
+  while (index < length) {
+    const char = text[index];
+
+    if (comments.some((token) => text.startsWith(token, index))) {
+      const newline = text.indexOf('\n', index);
+      index = newline === -1 ? length : newline;
+      continue;
+    }
+
+    if (blockComments && text.startsWith('/*', index)) {
+      const end = text.indexOf('*/', index + 2);
+      if (end === -1) {
+        const lineEnd = text.indexOf('\n', index);
+        found.push({
+          severity: 'error',
+          from: index,
+          to: Math.min(lineEnd === -1 ? length : lineEnd, index + 3),
+          message: 'Unterminated block comment',
+        });
+        index = length;
+      } else {
+        index = end + 2;
+      }
+      continue;
+    }
+
+    if ((lang === 'javascript' || lang === 'ruby' || lang === 'swift')
+      && char === '/' && regexAllowedBefore(text, index)) {
+      let cursor = index + 1;
+      let inClass = false;
+      let closed = false;
+      while (cursor < length) {
+        const next = text[cursor];
+        if (next === '\\') {
+          cursor += 2;
+          continue;
+        }
+        if (next === '\n') break;
+        if (next === '[') inClass = true;
+        else if (next === ']') inClass = false;
+        else if (next === '/' && !inClass) {
+          closed = true;
+          cursor += 1;
+          break;
+        }
+        cursor += 1;
+      }
+      if (closed) {
+        index = cursor;
+        while (index < length && /[a-z]/i.test(text[index])) index += 1;
+        continue;
+      }
+    }
+
+    if (lang === 'python' && (text.startsWith("'''", index) || text.startsWith('"""', index))) {
+      const quote = text.slice(index, index + 3);
+      const end = text.indexOf(quote, index + 3);
+      if (end === -1) {
+        const lineEnd = text.indexOf('\n', index);
+        found.push({
+          severity: 'error',
+          from: index,
+          to: Math.min(lineEnd === -1 ? length : lineEnd, index + 3),
+          message: 'Unterminated triple-quoted string',
+        });
+        strings.push({ from: index, to: length });
+        index = length;
+      } else {
+        strings.push({ from: index, to: end + 3 });
+        index = end + 3;
+      }
+      continue;
+    }
+
+    if (quotes.includes(char)) {
+      const lineEndAt = (at) => {
+        const newline = text.indexOf('\n', at);
+        return newline === -1 ? length : newline;
+      };
+      if (char === '`') {
+        let cursor = index + 1;
+        let closed = false;
+        while (cursor < length) {
+          if (text[cursor] === '\\') {
+            cursor += 2;
+            continue;
+          }
+          if (text[cursor] === '`') {
+            closed = true;
+            cursor += 1;
+            break;
+          }
+          cursor += 1;
+        }
+        strings.push({ from: index, to: closed ? cursor : length });
+        if (!closed) {
+          found.push({
+            severity: 'error',
+            from: index,
+            to: Math.min(lineEndAt(index), index + 40),
+            message: 'Unterminated template literal',
+          });
+          index = length;
+        } else {
+          index = cursor;
+        }
+        continue;
+      }
+
+      let cursor = index + 1;
+      let closed = false;
+      while (cursor < length) {
+        const next = text[cursor];
+        if (next === '\\') {
+          cursor += 2;
+          continue;
+        }
+        if (next === char) {
+          closed = true;
+          cursor += 1;
+          break;
+        }
+        if (next === '\n') break;
+        cursor += 1;
+      }
+      if (!closed) {
+        const lineEnd = lineEndAt(index);
+        found.push({
+          severity: 'error',
+          from: index,
+          to: Math.min(lineEnd, index + 40),
+          message: 'Unterminated string literal',
+        });
+        strings.push({ from: index, to: lineEnd });
+        index = lineEnd;
+      } else {
+        strings.push({ from: index, to: cursor });
+        index = cursor;
+      }
+      continue;
+    }
+
+    if ('([{'.includes(char)) {
+      stack.push({ char, at: index });
+    } else if (')]}'.includes(char)) {
+      const open = stack[stack.length - 1];
+      if (open && BRACKET_MATCH[char] === open.char) {
+        stack.pop();
+      } else if (open) {
+        found.push({
+          severity: 'error',
+          from: index,
+          to: index + 1,
+          message: `Expected '${BRACKET_CLOSE[open.char]}' but found '${char}'`,
+        });
+      } else {
+        found.push({
+          severity: 'error',
+          from: index,
+          to: index + 1,
+          message: `Unexpected '${char}'`,
+        });
+      }
+    }
+    index += 1;
+  }
+
+  for (const open of stack.slice(0, 8)) {
+    found.push({
+      severity: 'error',
+      from: open.at,
+      to: open.at + 1,
+      message: `Unclosed '${open.char}'`,
+    });
+  }
+
+  return { found, strings };
+}
+
+function stripLineComment(line, lang) {
+  const comments = commentTokensFor(lang);
+  let quote = null;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (quote) {
+      if (char === '\\') {
+        index += 1;
+        continue;
+      }
+      if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      continue;
+    }
+    if (comments.some((token) => line.startsWith(token, index))) return line.slice(0, index);
+  }
+  return line;
+}
+
+function hasTopLevelColon(code) {
+  let depth = 0;
+  let quote = null;
+  for (let index = 0; index < code.length; index += 1) {
+    const char = code[index];
+    if (quote) {
+      if (char === '\\') {
+        index += 1;
+        continue;
+      }
+      if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      continue;
+    }
+    if ('([{'.includes(char)) depth += 1;
+    else if (')]}'.includes(char)) depth = Math.max(0, depth - 1);
+    else if (char === ':' && depth === 0) return true;
+  }
+  return false;
+}
+
+function bracketDepth(code) {
+  let depth = 0;
+  let quote = null;
+  for (let index = 0; index < code.length; index += 1) {
+    const char = code[index];
+    if (quote) {
+      if (char === '\\') {
+        index += 1;
+        continue;
+      }
+      if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      continue;
+    }
+    if ('([{'.includes(char)) depth += 1;
+    else if (')]}'.includes(char)) depth = Math.max(0, depth - 1);
+  }
+  return depth;
+}
+
+function checkPythonHeaders(text, lang, stringRanges) {
+  if (lang !== 'python') return [];
+  const found = [];
+  let offset = 0;
+  for (const line of text.split('\n')) {
+    const lineStart = offset;
+    offset += line.length + 1;
+    const inString = stringRanges.some((range) => lineStart > range.from && lineStart < range.to);
+    if (inString) continue;
+    const code = stripLineComment(line, 'python');
+    if (!code.trim()) continue;
+    if (/^\s*(?:match|case)\s*=/.test(code)) continue;
+    const header = code.match(/^\s*(?:(?:async\s+)?(?:def|for|with)|if|elif|else|while|class|try|except|finally|match|case)\b/);
+    if (!header || hasTopLevelColon(code)) continue;
+    const trimmed = code.replace(/\s+$/, '');
+    if (trimmed.endsWith('\\') || bracketDepth(trimmed) > 0) continue;
+    const leading = code.length - code.trimStart().length;
+    found.push({
+      severity: 'error',
+      from: lineStart + leading,
+      to: lineStart + Math.max(leading + 1, trimmed.length),
+      message: `Expected ':' after '${header[0].trim()}'`,
+    });
+  }
+  return found;
+}
+
+function collectWarnings(text) {
+  const found = [];
+  let offset = 0;
+  for (const line of text.split('\n')) {
+    const lineStart = offset;
+    offset += line.length + 1;
+    const todo = /\b(TODO|FIXME|HACK|XXX)\b/.exec(line);
+    if (todo) {
+      found.push({
+        severity: 'warning',
+        from: lineStart + todo.index,
+        to: lineStart + todo.index + todo[0].length,
+        message: `"${todo[1]}" comment left in code`,
+      });
+    }
+    if (line.length > 120) {
+      found.push({
+        severity: 'warning',
+        from: lineStart + 120,
+        to: lineStart + line.length,
+        message: `Line is ${line.length} characters long (max 120)`,
+      });
+    }
+    const trailing = /[ \t]+$/.exec(line);
+    if (trailing && line.slice(0, trailing.index).trim()) {
+      found.push({
+        severity: 'warning',
+        from: lineStart + trailing.index,
+        to: lineStart + line.length,
+        message: 'Trailing whitespace',
+      });
+    }
+  }
+  return found;
+}
+
+function analyzeDocument(text, lang) {
+  const syntax = scanSyntax(text, lang);
+  const all = [
+    ...syntax.found,
+    ...checkPythonHeaders(text, lang, syntax.strings),
+    ...collectWarnings(text),
+  ];
+  const seen = new Set();
+  const unique = [];
+  for (const item of all) {
+    const key = `${item.severity}:${item.from}:${item.to}:${item.message}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(item);
+  }
+  unique.sort((a, b) => a.from - b.from || (a.severity === 'error' ? -1 : 1));
+  return unique.slice(0, 80);
+}
+
+function scheduleDiagnostics(delay = 320) {
+  if (!state.diagnostics) {
+    diagnostics = [];
+    publishDiagnostics();
+    return;
+  }
+  if (diagnosticsTimer) clearTimeout(diagnosticsTimer);
+  diagnosticsTimer = setTimeout(() => {
+    diagnosticsTimer = null;
+    runDiagnostics();
+  }, delay);
+}
+
+function runDiagnostics() {
+  if (!state.diagnostics || !view) {
+    diagnostics = [];
+    lastCheckedText = view ? view.state.doc.toString() : null;
+    publishDiagnostics();
+    return;
+  }
+  const text = view.state.doc.toString();
+  lastCheckedText = text;
+  diagnostics = analyzeDocument(text, language);
+  publishDiagnostics();
+}
+
+function publishDiagnostics() {
+  host?.__setProblems?.(diagnostics);
+  renderDiagnosticOverlay();
+}
+
+function createDiagnosticHost() {
+  diagnosticHost = document.createElement('div');
+  diagnosticHost.id = 'edabit-ide-diagnostics';
+  diagnosticHost.hidden = true;
+  const shadow = diagnosticHost.attachShadow({ mode: 'open' });
+  shadow.innerHTML = `
+    <style>
+      :host { all: initial; position: fixed; inset: 0; z-index: 2147483645; pointer-events: none; overflow: hidden; }
+      :host([hidden]) { display: none !important; }
+      .squiggle { position: absolute; height: 3px; background-repeat: repeat-x; background-position: left bottom; }
+      .squiggle.error { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3'%3E%3Cpath d='M0 2 L1.5 0 L3 2 L4.5 0 L6 2' fill='none' stroke='%23f14c4c' stroke-width='1'/%3E%3C/svg%3E"); }
+      .squiggle.warning { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3'%3E%3Cpath d='M0 2 L1.5 0 L3 2 L4.5 0 L6 2' fill='none' stroke='%23cca700' stroke-width='1'/%3E%3C/svg%3E"); }
+    </style>
+    <div class="layer"></div>`;
+  document.documentElement.append(diagnosticHost);
+}
+
+function renderDiagnosticOverlay() {
+  if (!diagnosticHost) createDiagnosticHost();
+  const layer = diagnosticHost.shadowRoot.querySelector('.layer');
+  layer.replaceChildren();
+  if (!state.diagnostics || !view || !editorEl || !diagnostics.length) {
+    diagnosticHost.hidden = true;
+    return;
+  }
+  const editorRect = editorEl.getBoundingClientRect();
+  const doc = view.state.doc;
+  for (const item of diagnostics) {
+    const from = Math.max(0, Math.min(item.from, doc.length));
+    const to = Math.max(from, Math.min(item.to, doc.length));
+    const firstLine = doc.lineAt(from).number;
+    const lastLine = doc.lineAt(Math.max(from, to - 1)).number;
+    for (let lineNumber = firstLine; lineNumber <= lastLine; lineNumber += 1) {
+      const line = doc.line(lineNumber);
+      const segmentFrom = Math.max(from, line.from);
+      const segmentTo = Math.min(to, line.to);
+      const start = view.coordsAtPos(segmentFrom);
+      if (!start) continue;
+      let end = view.coordsAtPos(segmentTo) || start;
+      if (Math.abs(end.top - start.top) > 4 || end.left < start.left) {
+        const lineEnd = view.coordsAtPos(line.to);
+        if (lineEnd && Math.abs(lineEnd.top - start.top) < 4) end = lineEnd;
+        else end = { left: start.left + 14, top: start.top, bottom: start.bottom };
+      }
+      if (start.bottom < editorRect.top || start.top > editorRect.bottom) continue;
+      const left = Math.max(editorRect.left + 1, Math.min(start.left, end.left));
+      const right = Math.min(editorRect.right - 1, Math.max(start.left, end.left));
+      if (right - left < 2) continue;
+      const top = Math.max(editorRect.top, Math.min(start.bottom - 2, editorRect.bottom - 3));
+      const squiggle = document.createElement('div');
+      squiggle.className = `squiggle ${item.severity}`;
+      squiggle.style.left = `${left}px`;
+      squiggle.style.top = `${top}px`;
+      squiggle.style.width = `${right - left}px`;
+      layer.append(squiggle);
+    }
+  }
+  diagnosticHost.hidden = layer.childElementCount === 0;
+}
+
+function revealDiagnostic(item) {
+  if (!view || !item) return;
+  const max = view.state.doc.length;
+  const from = Math.max(0, Math.min(item.from, max));
+  const to = Math.min(Math.max(item.to, from), max);
+  view.dispatch({ selection: { anchor: from, head: to }, scrollIntoView: true });
+  view.focus();
+}
+
+function goToProblem(direction) {
+  if (!view || !diagnostics.length) return false;
+  const sorted = [...diagnostics].sort((a, b) => a.from - b.from);
+  const head = view.state.selection.main.head;
+  let target;
+  if (direction > 0) {
+    target = sorted.find((item) => item.from > head) || sorted[0];
+  } else {
+    const before = sorted.filter((item) => item.to < head);
+    target = before[before.length - 1] || sorted[sorted.length - 1];
+  }
+  revealDiagnostic(target);
+  return true;
+}
+
+function createToolbar() {  host = document.createElement('div');
   host.id = HOST_ID;
   host.hidden = true;
   const shadow = host.attachShadow({ mode: 'open' });
@@ -405,7 +888,13 @@ function createToolbar() {
       .pill { display: inline-flex; align-items: center; gap: 7px; border: 1px solid #3d4a5f; border-radius: 999px; background: #1b2230; color: #e8eef7; padding: 9px 14px; cursor: pointer; font: inherit; font-weight: 600; box-shadow: 0 10px 30px rgba(0,0,0,.28); }
       .pill:hover { background: #242e40; border-color: #55647d; }
       .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: #3fb950; box-shadow: 0 0 0 3px rgba(63,185,80,.18); }
-      .panel { position: absolute; right: 0; bottom: 46px; width: 262px; padding: 12px; border: 1px solid #333d4d; border-radius: 12px; background: #151a23; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
+      .pill.has-warnings .dot { background: #cca700; box-shadow: 0 0 0 3px rgba(204,167,0,.2); }
+      .pill.has-errors .dot { background: #f14c4c; box-shadow: 0 0 0 3px rgba(241,76,76,.2); }
+      .issue { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+      .issue[hidden] { display: none; }
+      .issue.error { background: #5a1d1d; color: #ffb4b4; }
+      .issue.warning { background: #4a3a10; color: #f2d27a; }
+      .panel { position: absolute; right: 0; bottom: 46px; width: 262px; max-height: min(72vh, 620px); overflow: auto; scrollbar-width: thin; padding: 12px; border: 1px solid #333d4d; border-radius: 12px; background: #151a23; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
       .panel[hidden] { display: none; }
       .head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
       .head b { font-size: 13px; letter-spacing: .01em; }
@@ -425,6 +914,19 @@ function createToolbar() {
       .snippet-list { display: flex; flex-wrap: wrap; gap: 6px; max-height: 132px; overflow: auto; scrollbar-width: thin; }
       .snippet { border: 1px solid #333d4d; border-radius: 7px; background: #1b2230; color: #cfd9e6; font: inherit; font-size: 12px; padding: 4px 8px; cursor: pointer; }
       .snippet:hover { background: #263041; border-color: #4a5a72; color: #fff; }
+      .problems { margin-top: 8px; padding-top: 10px; border-top: 1px solid #28313f; }
+      .problems-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+      .problems-head > span:first-child { color: #8a97ab; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+      .summary { color: #6f7d91; font-size: 10px; }
+      .problem-list { display: flex; flex-direction: column; gap: 1px; max-height: 126px; overflow: auto; scrollbar-width: thin; }
+      .problem { display: flex; align-items: flex-start; gap: 6px; width: 100%; border: 0; border-radius: 6px; background: transparent; color: #cfd9e6; font: inherit; font-size: 11px; line-height: 1.4; padding: 4px 5px; text-align: left; cursor: pointer; }
+      .problem:hover { background: #232c3a; color: #fff; }
+      .problem .sev { flex: 0 0 12px; font-weight: 700; text-align: center; }
+      .problem .sev.error { color: #f14c4c; }
+      .problem .sev.warning { color: #cca700; }
+      .problem .msg { flex: 1 1 auto; overflow-wrap: anywhere; }
+      .problem .ln { flex: 0 0 auto; color: #7f8da3; font-variant-numeric: tabular-nums; }
+      .problem-empty { padding: 2px 4px; color: #6f7d91; font-size: 11px; }
       .hint { margin-top: 9px; color: #6f7d91; font-size: 11px; }
       .hint kbd { display: inline-block; padding: 1px 5px; border: 1px solid #333d4d; border-bottom-width: 2px; border-radius: 4px; background: #1d2430; color: #b9c4d4; font: 10px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
       .reset { width: 100%; margin-top: 10px; border: 1px solid #333d4d; border-radius: 8px; background: transparent; color: #93a0b4; font: inherit; padding: 6px; cursor: pointer; }
@@ -438,11 +940,16 @@ function createToolbar() {
         <div class="row"><span>Font size</span><div class="stepper"><button type="button" data-step="-1">−</button><output id="size">15</output><button type="button" data-step="1">+</button></div></div>
         <label class="row"><span>Word completion</span><input id="completions" type="checkbox"></label>
         <label class="row"><span>Smooth typing</span><input id="smooth" type="checkbox"></label>
+        <label class="row"><span>Check errors &amp; warnings</span><input id="diagnostics" type="checkbox"></label>
+        <div class="problems">
+          <div class="problems-head"><span>Problems</span><span class="summary" id="problem-summary">No problems</span></div>
+          <div class="problem-list" id="problem-list"></div>
+        </div>
         <div class="snippets"><span>Snippets</span><div class="snippet-list" id="snippet-list"></div></div>
-        <div class="hint"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> command palette</div>
+        <div class="hint"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> command palette · <kbd>F8</kbd> next problem</div>
         <button class="reset" type="button">Reset to default</button>
       </section>
-      <button class="pill" type="button"><span class="dot"></span>Editor+</button>
+      <button class="pill" type="button"><span class="dot"></span>Editor+<span class="issue error" id="issue-error" hidden></span><span class="issue warning" id="issue-warning" hidden></span></button>
     </div>`;
 
   panel = shadow.querySelector('.panel');
@@ -451,7 +958,73 @@ function createToolbar() {
   const sizeOutput = shadow.querySelector('#size');
   const completionsInput = shadow.querySelector('#completions');
   const smoothInput = shadow.querySelector('#smooth');
+  const diagnosticsInput = shadow.querySelector('#diagnostics');
   const snippetList = shadow.querySelector('#snippet-list');
+  const problemList = shadow.querySelector('#problem-list');
+  const problemSummary = shadow.querySelector('#problem-summary');
+  const issueError = shadow.querySelector('#issue-error');
+  const issueWarning = shadow.querySelector('#issue-warning');
+
+  const updateIssueBadges = (items) => {
+    const errors = items.filter((item) => item.severity === 'error').length;
+    const warnings = items.filter((item) => item.severity === 'warning').length;
+    issueError.hidden = errors === 0;
+    issueWarning.hidden = warnings === 0;
+    issueError.textContent = String(errors);
+    issueWarning.textContent = String(warnings);
+    pill.classList.toggle('has-errors', errors > 0);
+    pill.classList.toggle('has-warnings', errors === 0 && warnings > 0);
+    const parts = [];
+    if (errors) parts.push(`${errors} error${errors === 1 ? '' : 's'}`);
+    if (warnings) parts.push(`${warnings} warning${warnings === 1 ? '' : 's'}`);
+    pill.title = parts.length ? parts.join(', ') : 'No problems detected';
+  };
+
+  const renderProblems = (items) => {
+    const errors = items.filter((item) => item.severity === 'error').length;
+    const warnings = items.filter((item) => item.severity === 'warning').length;
+    if (!state.diagnostics) {
+      problemSummary.textContent = 'Checking off';
+    } else if (!items.length) {
+      problemSummary.textContent = 'No problems';
+    } else {
+      problemSummary.textContent = [
+        errors ? `${errors} error${errors === 1 ? '' : 's'}` : '',
+        warnings ? `${warnings} warning${warnings === 1 ? '' : 's'}` : '',
+      ].filter(Boolean).join(' · ');
+    }
+    if (!items.length) {
+      const empty = document.createElement('div');
+      empty.className = 'problem-empty';
+      empty.textContent = state.diagnostics ? 'No problems detected' : 'Error checking is disabled';
+      problemList.replaceChildren(empty);
+      return;
+    }
+    const rows = items.map((item) => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'problem';
+      row.title = item.message;
+      const severity = document.createElement('span');
+      severity.className = `sev ${item.severity}`;
+      severity.textContent = item.severity === 'error' ? '✕' : '⚠';
+      const message = document.createElement('span');
+      message.className = 'msg';
+      message.textContent = item.message;
+      const line = document.createElement('span');
+      line.className = 'ln';
+      line.textContent = String(view ? view.state.doc.lineAt(Math.min(item.from, view.state.doc.length)).number : '');
+      row.append(severity, message, line);
+      row.addEventListener('click', () => revealDiagnostic(item));
+      return row;
+    });
+    problemList.replaceChildren(...rows);
+  };
+
+  host.__setProblems = (items) => {
+    updateIssueBadges(items);
+    renderProblems(items);
+  };
 
   pill.addEventListener('click', () => togglePanel());
   shadow.querySelector('.close').addEventListener('click', () => togglePanel(false));
@@ -466,6 +1039,7 @@ function createToolbar() {
 
   completionsInput.addEventListener('change', () => setCompletions(completionsInput.checked));
   smoothInput.addEventListener('change', () => setSmooth(smoothInput.checked));
+  diagnosticsInput.addEventListener('change', () => setDiagnostics(diagnosticsInput.checked));
 
   shadow.querySelector('.reset').addEventListener('click', resetAll);
 
@@ -486,9 +1060,12 @@ function createToolbar() {
     sizeOutput.textContent = String(state.fontSize);
     completionsInput.checked = state.completions;
     smoothInput.checked = state.smooth;
+    diagnosticsInput.checked = state.diagnostics;
     shadow.querySelectorAll('[data-theme]').forEach((button) => {
       button.classList.toggle('on', button.dataset.theme === state.theme);
     });
+    updateIssueBadges(diagnostics);
+    renderProblems(diagnostics);
   };
 
   document.documentElement.append(host);
@@ -530,16 +1107,30 @@ function setSmooth(enabled) {
   applySettings(true);
 }
 
+function setDiagnostics(enabled) {
+  state.diagnostics = enabled;
+  saveSettings();
+  syncControls();
+  if (!enabled) {
+    diagnostics = [];
+    publishDiagnostics();
+    return;
+  }
+  scheduleDiagnostics(0);
+}
+
 function resetAll() {
   state.theme = 'default';
   state.fontSize = 15;
   state.completions = true;
   state.smooth = true;
+  state.diagnostics = true;
   saveSettings();
   syncControls();
   applySettings(true);
   hideCompletion();
   endSnippet();
+  scheduleDiagnostics(0);
 }
 
 function togglePanel(force) {
@@ -965,6 +1556,7 @@ function acceptCompletion() {
 function repositionOverlays() {
   if (completionHost && !completionHost.hidden) positionCompletion();
   if (ghostHost && !ghostHost.hidden) positionGhost();
+  renderDiagnosticOverlay();
 }
 
 function allCommands() {
@@ -976,6 +1568,10 @@ function allCommands() {
     { label: 'Reset font size', detail: '15px', run: () => setFontSize(15) },
     { label: state.completions ? 'Disable word completion' : 'Enable word completion', detail: state.completions ? 'On' : 'Off', run: () => setCompletions(!state.completions) },
     { label: state.smooth ? 'Disable smooth typing' : 'Enable smooth typing', detail: state.smooth ? 'On' : 'Off', run: () => setSmooth(!state.smooth) },
+    { label: state.diagnostics ? 'Disable error checking' : 'Enable error checking', detail: state.diagnostics ? 'On' : 'Off', run: () => setDiagnostics(!state.diagnostics) },
+    { label: 'Go to next problem', detail: 'F8', run: () => goToProblem(1) },
+    { label: 'Go to previous problem', detail: 'Shift+F8', run: () => goToProblem(-1) },
+    { label: 'Show problems', detail: `${diagnostics.length}`, run: () => togglePanel(true) },
     { label: 'Go to line…', detail: 'Navigation', run: () => startGoto() },
     { label: 'Show snippets panel', detail: 'Editor', run: () => togglePanel(true) },
     { label: 'Reset all settings', detail: 'Editor', run: () => resetAll() },
@@ -1173,6 +1769,13 @@ function togglePalette(force) {
 
 function onEditorKeyDown(event) {
   if (!event.target?.closest?.('.cm-content')) return;
+  if (event.key === 'F8') {
+    if (goToProblem(event.shiftKey ? -1 : 1)) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    return;
+  }
   if (event.code === 'Space' && (event.ctrlKey || event.metaKey) && !event.altKey) {
     if (!view) return;
     event.preventDefault();
@@ -1247,6 +1850,9 @@ function sync() {
     hideCompletion();
     view = null;
     editorEl = null;
+    diagnostics = [];
+    lastCheckedText = null;
+    publishDiagnostics();
     return;
   }
 
@@ -1259,30 +1865,40 @@ function sync() {
   host.hidden = false;
 
   const nextLanguage = detectLanguage();
-  if (editorChanged || nextLanguage !== language) {
+  const languageChanged = nextLanguage !== language;
+  if (editorChanged || languageChanged) {
     host.__updateLanguage?.(nextLanguage);
     hideCompletion();
   }
 
   applySettings(editorChanged);
+  if (state.diagnostics && view) {
+    const text = view.state.doc.toString();
+    if (editorChanged || languageChanged || text !== lastCheckedText) scheduleDiagnostics();
+  }
   if (state.open) syncControls();
+}
+
+function afterEditorChange() {
+  updateCompletion();
+  scheduleDiagnostics();
 }
 
 document.addEventListener('input', (event) => {
   if (event.isComposing) return;
   if (!refreshEditor(event.target)) return;
-  requestAnimationFrame(() => updateCompletion());
+  requestAnimationFrame(afterEditorChange);
 }, true);
 
 document.addEventListener('compositionend', (event) => {
   if (!refreshEditor(event.target)) return;
-  requestAnimationFrame(() => updateCompletion());
+  requestAnimationFrame(afterEditorChange);
 }, true);
 
 document.addEventListener('beforeinput', (event) => {
   if (event.isComposing) return;
   if (!refreshEditor(event.target)) return;
-  requestAnimationFrame(() => updateCompletion());
+  requestAnimationFrame(afterEditorChange);
 }, true);
 
 document.addEventListener('keyup', (event) => {
@@ -1292,7 +1908,7 @@ document.addEventListener('keyup', (event) => {
   if (key !== 'Backspace' && key !== 'Delete' && !undoOrRedo) return;
   if (!refreshEditor(event.target)) return;
   if (undoOrRedo) endSnippet();
-  requestAnimationFrame(() => updateCompletion());
+  requestAnimationFrame(afterEditorChange);
 }, true);
 
 document.addEventListener('focusin', (event) => {

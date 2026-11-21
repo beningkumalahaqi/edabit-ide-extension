@@ -12,6 +12,7 @@ Supports Edabit's eight advertised languages: **C#, C++, Java, JavaScript, PHP, 
 - **Inline ghost text** that previews the top completion after the caret.
 - **Keyboard-first flow**: `↑`/`↓` to navigate, `Tab` or `Enter` to accept, `Esc` to dismiss, `Ctrl+Space` to open suggestions manually.
 - **Command palette** with fuzzy command search, theme and font commands, and go-to-line.
+- **Live error and warning checks**: unbalanced brackets, unterminated strings, missing Python colons, TODO/FIXME comments, trailing whitespace and overly long lines, with inline squiggles and a Problems list.
 - **Smooth typing mode**: animated caret movement and soft active-line transitions.
 - **Language-aware snippets panel** with one-click insertion.
 - **In-place theming**: keep Edabit's theme or switch the editor to a neutral dark theme.
@@ -28,6 +29,14 @@ Supports Edabit's eight advertised languages: **C#, C++, Java, JavaScript, PHP, 
 - Structural snippets show a compact shape in the detail column, e.g. `for (let i = 0; i < n; i++) { … }`.
 - While filling in a snippet, `Tab` jumps to the next placeholder and `Esc` leaves snippet mode. The final tab stop drops the caret where the template expects you to continue typing.
 - Suggestions come from curated per-language dictionaries. They are not compiler-grade IntelliSense and do not provide semantic diagnostics or go-to-definition.
+- Error checking runs locally in the page, about a third of a second after you stop typing. It catches structural mistakes and common style issues; it is not a full compiler.
+
+## Problems
+
+- Errors and warnings appear as colored squiggles under the affected text.
+- The **Editor+** button shows counts for errors and warnings. Open the panel to see the Problems list.
+- Click a problem to jump to its location, or press `F8` / `Shift+F8` to move between problems.
+- Turn checking off with **Check errors & warnings** in the panel or from the command palette.
 
 ## Build and install
 
@@ -54,6 +63,7 @@ Then:
 - Press `Ctrl+Shift+P` (`Cmd+Shift+P` on macOS) to open the command palette. Type to filter commands, then press `Enter` to run one.
 - Press `Ctrl+Shift+E` (`Cmd+Shift+E` on macOS) to toggle the settings panel.
 - Toggle **Smooth typing** in the panel (or from the palette) to animate caret movement.
+- Use `F8` / `Shift+F8` to jump to the next or previous problem. Open the panel to review the full Problems list.
 - Choose a snippet from the panel to insert it at the cursor, or type a structure name such as `for`, `if`, or `switch` and accept it from the suggestion list.
 
 ## How it works
