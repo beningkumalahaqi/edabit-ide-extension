@@ -1,0 +1,9 @@
+{
+  "name": "edabit-ide-enhanced-editor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "vite build", "dev": "vite build --watch" },
+  "dependencies": { "monaco-editor": "^0.55.1" },
+  "devDependencies": { "vite": "^6.4.1" }
+}
