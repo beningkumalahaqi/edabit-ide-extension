@@ -1,802 +1,916 @@
+import * as prettier from 'prettier/standalone';
+import * as prettierBabel from 'prettier/plugins/babel';
+import * as prettierEstree from 'prettier/plugins/estree';
 import { SUGGESTIONS } from './suggestions.js';
 
 (function () {
-const HOST_ID = 'edabit-ide-tools';
-const COMPLETION_ID = 'edabit-ide-completion';
-const GHOST_ID = 'edabit-ide-ghost';
-const SETTINGS_KEY = 'edabitIdeSettings';
+  const HOST_ID = 'edabit-ide-tools';
+  const COMPLETION_ID = 'edabit-ide-completion';
+  const GHOST_ID = 'edabit-ide-ghost';
+  const SETTINGS_KEY = 'edabitIdeSettings';
 
-const snip = (label, body, detail) => ({ label, body, detail });
+  const snip = (label, body, detail) => ({ label, body, detail });
 
-const SNIPPETS = {
-  javascript: [
-    snip('function', 'function ${1:name}(${2:args}) {\n  $0\n}', 'function name(args) { … }'),
-    snip('arrow fn', 'const ${1:name} = (${2:args}) => {\n  $0\n};', 'const name = (args) => { … }'),
-    snip('async fn', 'async function ${1:name}(${2:args}) {\n  $0\n}', 'async function name(args) { … }'),
-    snip('if', 'if (${1:condition}) {\n  $0\n}', 'if (condition) { … }'),
-    snip('if/else', 'if (${1:condition}) {\n  $0\n} else {\n  \n}', 'if (condition) { … } else { … }'),
-    snip('if/else if/else', 'if (${1:condition}) {\n  $0\n} else if (${2:condition}) {\n  \n} else {\n  \n}', 'if / else if / else chain'),
-    snip('for', 'for (let ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++) {\n  $0\n}', 'for (let i = 0; i < n; i++) { … }'),
-    snip('for...of', 'for (const ${1:item} of ${2:items}) {\n  $0\n}', 'for (const item of items) { … }'),
-    snip('for...in', 'for (const ${1:key} in ${2:object}) {\n  $0\n}', 'for (const key in object) { … }'),
-    snip('while', 'while (${1:condition}) {\n  $0\n}', 'while (condition) { … }'),
-    snip('do...while', 'do {\n  $0\n} while (${1:condition});', 'do { … } while (condition);'),
-    snip('switch', 'switch (${1:value}) {\n  case ${2:match}:\n    $0\n    break;\n  default:\n    break;\n}', 'switch (value) { case … }'),
-    snip('try/catch', 'try {\n  $0\n} catch (${1:error}) {\n  \n}', 'try { … } catch (error) { … }'),
-    snip('class', 'class ${1:Name} {\n  constructor(${2:args}) {\n    $0\n  }\n}', 'class Name { constructor(args) { … } }'),
-    snip('map', '${1:items}.map((${2:item}) => $0)', 'items.map(item => …)'),
-    snip('filter', '${1:items}.filter((${2:item}) => $0)', 'items.filter(item => …)'),
-    snip('reduce', '${1:items}.reduce((${2:acc}, ${3:item}) => $0, ${4:0})', 'items.reduce((acc, item) => …, 0)'),
-    snip('console.log', 'console.log($0);', 'console.log(value);'),
-    snip('setTimeout', 'setTimeout(() => {\n  $0\n}, ${1:delay});', 'setTimeout(() => { … }, delay)'),
-  ],
-  python: [
-    snip('def', 'def ${1:name}(${2:args}):\n    $0', 'def name(args): …'),
-    snip('if', 'if ${1:condition}:\n    $0', 'if condition: …'),
-    snip('if/else', 'if ${1:condition}:\n    $0\nelse:\n    ', 'if condition: … else: …'),
-    snip('if/elif/else', 'if ${1:condition}:\n    $0\nelif ${2:condition}:\n    \nelse:\n    ', 'if / elif / else chain'),
-    snip('for', 'for ${1:item} in ${2:items}:\n    $0', 'for item in items: …'),
-    snip('while', 'while ${1:condition}:\n    $0', 'while condition: …'),
-    snip('try/except', 'try:\n    $0\nexcept ${1:Exception} as ${2:error}:\n    ', 'try: … except Exception as error: …'),
-    snip('with', 'with open(${1:path}) as ${2:file}:\n    $0', 'with open(path) as file: …'),
-    snip('class', 'class ${1:Name}:\n    def __init__(self, ${2:args}):\n        $0', 'class Name: def __init__ …'),
-    snip('list comp', '[${1:expr} for ${2:item} in ${3:items}]', '[expr for item in items]'),
-    snip('dict comp', '{${1:key}: ${2:value} for ${3:item} in ${4:items}}', '{key: value for item in items}'),
-    snip('lambda', 'lambda ${1:args}: $0', 'lambda args: expression'),
-    snip('main guard', 'if __name__ == "__main__":\n    $0', 'if __name__ == "__main__": …'),
-    snip('print', 'print($0)', 'print(value)'),
-  ],
-  csharp: [
-    snip('method', 'public static ${1:ReturnType} ${2:Name}(${3:args})\n{\n    $0\n}', 'public static ReturnType Name(args) { … }'),
-    snip('if', 'if (${1:condition})\n{\n    $0\n}', 'if (condition) { … }'),
-    snip('if/else', 'if (${1:condition})\n{\n    $0\n}\nelse\n{\n    \n}', 'if (condition) { … } else { … }'),
-    snip('for', 'for (int ${1:i} = 0; ${1:i} < ${2:length}; ${1:i}++)\n{\n    $0\n}', 'for (int i = 0; i < length; i++) { … }'),
-    snip('foreach', 'foreach (var ${1:item} in ${2:items})\n{\n    $0\n}', 'foreach (var item in items) { … }'),
-    snip('while', 'while (${1:condition})\n{\n    $0\n}', 'while (condition) { … }'),
-    snip('switch', 'switch (${1:value})\n{\n    case ${2:match}:\n        $0\n        break;\n    default:\n        break;\n}', 'switch (value) { case … }'),
-    snip('try/catch', 'try\n{\n    $0\n}\ncatch (${1:Exception} ex)\n{\n    \n}', 'try { … } catch (Exception ex) { … }'),
-    snip('class', 'public class ${1:Name}\n{\n    $0\n}', 'public class Name { … }'),
-    snip('linq', '${1:items}.Where(${2:item} => $0)', 'items.Where(item => …)'),
-    snip('Console.WriteLine', 'Console.WriteLine($0);', 'Console.WriteLine(value);'),
-  ],
-  cpp: [
-    snip('main', 'int main() {\n    $0\n    return 0;\n}', 'int main() { … }'),
-    snip('function', '${1:int} ${2:name}(${3:args}) {\n    $0\n}', 'int name(args) { … }'),
-    snip('if', 'if (${1:condition}) {\n    $0\n}', 'if (condition) { … }'),
-    snip('if/else', 'if (${1:condition}) {\n    $0\n} else {\n    \n}', 'if (condition) { … } else { … }'),
-    snip('for', 'for (int ${1:i} = 0; ${1:i} < ${2:n}; ++${1:i}) {\n    $0\n}', 'for (int i = 0; i < n; ++i) { … }'),
-    snip('range for', 'for (const auto& ${1:item} : ${2:items}) {\n    $0\n}', 'for (const auto& item : items) { … }'),
-    snip('while', 'while (${1:condition}) {\n    $0\n}', 'while (condition) { … }'),
-    snip('switch', 'switch (${1:value}) {\n    case ${2:match}:\n        $0\n        break;\n    default:\n        break;\n}', 'switch (value) { case … }'),
-    snip('try/catch', 'try {\n    $0\n} catch (const ${1:std::exception}& ${2:e}) {\n    \n}', 'try { … } catch (const std::exception& e) { … }'),
-    snip('class', 'class ${1:Name} {\npublic:\n    ${2:Name}(${3:args}) {\n        $0\n    }\n};', 'class Name { public: Name(args) { … } };'),
-    snip('cout', 'cout << ${1:value} << endl;', 'cout << value << endl;'),
-    snip('vector', 'vector<${1:int}> ${2:values};', 'vector<int> values;'),
-  ],
-  java: [
-    snip('main', 'public static void main(String[] args) {\n    $0\n}', 'public static void main(String[] args) { … }'),
-    snip('method', 'public static ${1:ReturnType} ${2:name}(${3:args}) {\n    $0\n}', 'public static ReturnType name(args) { … }'),
-    snip('if', 'if (${1:condition}) {\n    $0\n}', 'if (condition) { … }'),
-    snip('if/else', 'if (${1:condition}) {\n    $0\n} else {\n    \n}', 'if (condition) { … } else { … }'),
-    snip('for', 'for (int ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++) {\n    $0\n}', 'for (int i = 0; i < n; i++) { … }'),
-    snip('for-each', 'for (${1:Type} ${2:item} : ${3:items}) {\n    $0\n}', 'for (Type item : items) { … }'),
-    snip('while', 'while (${1:condition}) {\n    $0\n}', 'while (condition) { … }'),
-    snip('switch', 'switch (${1:value}) {\n    case ${2:match}:\n        $0\n        break;\n    default:\n        break;\n}', 'switch (value) { case … }'),
-    snip('try/catch', 'try {\n    $0\n} catch (${1:Exception} ${2:e}) {\n    \n}', 'try { … } catch (Exception e) { … }'),
-    snip('class', 'public class ${1:Name} {\n    public ${1:Name}(${2:args}) {\n        $0\n    }\n}', 'public class Name { public Name(args) { … } }'),
-    snip('println', 'System.out.println($0);', 'System.out.println(value);'),
-    snip('list', 'List<${1:String}> ${2:items} = new ArrayList<>();', 'List<String> items = new ArrayList<>();'),
-  ],
-  php: [
-    snip('function', 'function ${1:name}(${2:args}) {\n    $0\n}', 'function name(args) { … }'),
-    snip('if', 'if (${1:condition}) {\n    $0\n}', 'if (condition) { … }'),
-    snip('if/else', 'if (${1:condition}) {\n    $0\n} else {\n    \n}', 'if (condition) { … } else { … }'),
-    snip('for', 'for ($${1:i} = 0; $${1:i} < ${2:n}; $${1:i}++) {\n    $0\n}', 'for ($i = 0; $i < n; $i++) { … }'),
-    snip('foreach', 'foreach ($${1:items} as $${2:item}) {\n    $0\n}', 'foreach ($items as $item) { … }'),
-    snip('while', 'while (${1:condition}) {\n    $0\n}', 'while (condition) { … }'),
-    snip('switch', 'switch ($${1:value}) {\n    case ${2:match}:\n        $0\n        break;\n    default:\n        break;\n}', 'switch ($value) { case … }'),
-    snip('try/catch', 'try {\n    $0\n} catch (${1:Exception} $${2:e}) {\n    \n}', 'try { … } catch (Exception $e) { … }'),
-    snip('class', 'class ${1:Name} {\n    public function ${2:method}($${3:args}) {\n        $0\n    }\n}', 'class Name { public function method($args) { … } }'),
-    snip('echo', 'echo $${1:value};', 'echo $value;'),
-  ],
-  ruby: [
-    snip('def', 'def ${1:name}(${2:args})\n  $0\nend', 'def name(args) … end'),
-    snip('if', 'if ${1:condition}\n  $0\nend', 'if condition … end'),
-    snip('if/else', 'if ${1:condition}\n  $0\nelse\n  \nend', 'if condition … else … end'),
-    snip('if/elsif/else', 'if ${1:condition}\n  $0\nelsif ${2:condition}\n  \nelse\n  \nend', 'if / elsif / else chain'),
-    snip('unless', 'unless ${1:condition}\n  $0\nend', 'unless condition … end'),
-    snip('for', 'for ${1:item} in ${2:items}\n  $0\nend', 'for item in items … end'),
-    snip('while', 'while ${1:condition}\n  $0\nend', 'while condition … end'),
-    snip('each', '${1:items}.each do |${2:item}|\n  $0\nend', 'items.each do |item| … end'),
-    snip('map', '${1:items}.map { |${2:item}| $0 }', 'items.map { |item| … }'),
-    snip('case', 'case ${1:value}\nwhen ${2:match}\n  $0\nelse\n  \nend', 'case value when … end'),
-    snip('begin/rescue', 'begin\n  $0\nrescue ${1:StandardError} => ${2:e}\n  \nend', 'begin … rescue StandardError => e … end'),
-    snip('class', 'class ${1:Name}\n  def initialize(${2:args})\n    $0\n  end\nend', 'class Name … end'),
-  ],
-  swift: [
-    snip('func', 'func ${1:name}(${2:args}) -> ${3:ReturnType} {\n    $0\n}', 'func name(args) -> ReturnType { … }'),
-    snip('if', 'if ${1:condition} {\n    $0\n}', 'if condition { … }'),
-    snip('if/else', 'if ${1:condition} {\n    $0\n} else {\n    \n}', 'if condition { … } else { … }'),
-    snip('guard', 'guard let ${1:value} = ${2:optional} else {\n    return\n}\n$0', 'guard let value = optional else { return }'),
-    snip('for', 'for ${1:item} in ${2:items} {\n    $0\n}', 'for item in items { … }'),
-    snip('while', 'while ${1:condition} {\n    $0\n}', 'while condition { … }'),
-    snip('switch', 'switch ${1:value} {\ncase ${2:match}:\n    $0\ndefault:\n    break\n}', 'switch value { case … }'),
-    snip('do/catch', 'do {\n    $0\n} catch {\n    \n}', 'do { … } catch { … }'),
-    snip('struct', 'struct ${1:Name} {\n    $0\n}', 'struct Name { … }'),
-    snip('class', 'class ${1:Name} {\n    init(${2:args}) {\n        $0\n    }\n}', 'class Name { init(args) { … } }'),
-  ],
-};
-
-const KIND_RANK = { snippet: 0, function: 1, method: 2, property: 3, class: 4, module: 5, variable: 6, keyword: 7 };
-const KIND_BADGE = {
-  function: 'ƒ',
-  method: 'm',
-  property: 'p',
-  class: 'C',
-  module: 'M',
-  variable: 'v',
-  keyword: 'k',
-  snippet: 's',
-};
-
-const state = {
-  theme: 'default',
-  fontSize: 15,
-  completions: true,
-  smooth: true,
-  diagnostics: true,
-  open: false,
-};
-
-let view = null;
-let editorEl = null;
-let editorContent = null;
-let language = 'javascript';
-let appliedKey = '';
-let host = null;
-let panel = null;
-let completionHost = null;
-let completionList = null;
-let completionDocs = null;
-let completionItems = [];
-let completionPrefix = '';
-let completionIndex = 0;
-let ghostHost = null;
-let ghostText = null;
-let snippetSession = null;
-let paletteHost = null;
-let paletteInput = null;
-let paletteResults = null;
-let paletteCommands = [];
-let paletteIndex = 0;
-let paletteMode = 'command';
-let diagnostics = [];
-let diagnosticsTimer = null;
-let diagnosticHost = null;
-let lastCheckedText = null;
-
-function findEditor() {
-  const content = document.querySelector('#challenge-code-editor .cm-content')
-    || document.querySelector('.ed-challenge-code__editor-frame .cm-content')
-    || document.querySelector('.cm-content');
-  const foundView = content?.cmTile?.root?.view;
-  if (!foundView) return null;
-  return { view: foundView, content, editor: content.closest('.cm-editor') };
-}
-
-function detectLanguage() {
-  const title = document.title;
-  if (/c#|csharp/i.test(title)) return 'csharp';
-  if (/c\+\+|cpp/i.test(title)) return 'cpp';
-  if (/javascript/i.test(title)) return 'javascript';
-  if (/python/i.test(title)) return 'python';
-  if (/\bjava\b/i.test(title)) return 'java';
-  if (/php/i.test(title)) return 'php';
-  if (/ruby/i.test(title)) return 'ruby';
-  if (/swift/i.test(title)) return 'swift';
-  return 'javascript';
-}
-
-function loadSettings() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
-    if (saved) {
-      if (saved.theme === 'dark' || saved.theme === 'default') state.theme = saved.theme;
-      if (Number.isFinite(saved.fontSize)) state.fontSize = Math.min(24, Math.max(12, saved.fontSize));
-      if (typeof saved.completions === 'boolean') state.completions = saved.completions;
-      if (typeof saved.smooth === 'boolean') state.smooth = saved.smooth;
-      if (typeof saved.diagnostics === 'boolean') state.diagnostics = saved.diagnostics;
-    }
-  } catch {
-    /* ignore unreadable settings */
-  }
-  syncControls();
-  applySettings(true);
-}
-
-function saveSettings() {
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-      theme: state.theme,
-      fontSize: state.fontSize,
-      completions: state.completions,
-      smooth: state.smooth,
-      diagnostics: state.diagnostics,
-    }));
-  } catch {
-    /* storage can be unavailable in private mode */
-  }
-}
-
-function applySettings(force = false) {
-  if (!view || !editorEl) return;
-  const key = `${state.theme}|${state.fontSize}|${state.smooth}`;
-  const changed = force || key !== appliedKey;
-  editorEl.classList.add('edx-enhanced');
-  editorEl.classList.toggle('edx-dark', state.theme === 'dark');
-  editorEl.classList.toggle('edx-smooth', state.smooth);
-  editorEl.style.setProperty('--edx-font-size', `${state.fontSize}px`);
-  if (changed) {
-    appliedKey = key;
-    requestAnimationFrame(() => {
-      view?.requestMeasure?.();
-      renderDiagnosticOverlay();
-    });
-  }
-}
-
-function parseSnippet(text) {
-  let output = '';
-  let cursor = -1;
-  let hasCursor = false;
-  const stops = [];
-  let index = 0;
-  while (index < text.length) {
-    if (text.startsWith('$0', index)) {
-      cursor = output.length;
-      hasCursor = true;
-      index += 2;
-      continue;
-    }
-    if (text[index] === '$' && text[index + 1] === '{') {
-      const end = text.indexOf('}', index + 2);
-      if (end > -1) {
-        const body = text.slice(index + 2, end);
-        const colon = body.indexOf(':');
-        const numberText = colon >= 0 ? body.slice(0, colon) : body;
-        const number = Number(numberText);
-        const value = colon >= 0 ? body.slice(colon + 1) : '';
-        if (Number.isFinite(number) && String(number) === numberText.trim()) {
-          if (number === 0) {
-            cursor = output.length;
-            hasCursor = true;
-          } else {
-            const from = output.length;
-            output += value;
-            const existing = stops.find((stop) => stop.index === number);
-            if (existing) existing.mirrors.push({ from, to: output.length });
-            else stops.push({ index: number, from, to: output.length, mirrors: [] });
-          }
-          index = end + 1;
-          continue;
-        }
-      }
-    }
-    if (text[index] === '$' && /\d/.test(text[index + 1] || '')) {
-      const number = Number(text[index + 1]);
-      if (number === 0) {
-        cursor = output.length;
-        hasCursor = true;
-      } else {
-        const existing = stops.find((stop) => stop.index === number);
-        if (existing) existing.mirrors.push({ from: output.length, to: output.length });
-        else stops.push({ index: number, from: output.length, to: output.length, mirrors: [] });
-      }
-      index += 2;
-      continue;
-    }
-    output += text[index];
-    index += 1;
-  }
-  stops.sort((a, b) => a.index - b.index);
-  if (hasCursor) stops.push({ index: Number.MAX_SAFE_INTEGER, from: cursor, to: cursor, mirrors: [], final: true });
-  return { text: output, cursor: hasCursor ? cursor : output.length, stops };
-}
-
-function selectionFor(ranges) {
-  try {
-    const Selection = view.state.selection.constructor;
-    if (ranges.length > 1) {
-      return Selection.create(ranges.map((range) => Selection.range(range.from, range.to)));
-    }
-    return Selection.range(ranges[0].from, ranges[0].to);
-  } catch {
-    return { anchor: ranges[0].from, head: ranges[0].to };
-  }
-}
-
-function absoluteStop(stop, offset) {
-  return {
-    final: Boolean(stop.final),
-    ranges: [
-      { from: offset + stop.from, to: offset + stop.to },
-      ...stop.mirrors.map((mirror) => ({ from: offset + mirror.from, to: offset + mirror.to })),
+  const SNIPPETS = {
+    javascript: [
+      snip('function', 'function ${1:name}(${2:args}) {\n  $0\n}', 'function name(args) { … }'),
+      snip('arrow fn', 'const ${1:name} = (${2:args}) => {\n  $0\n};', 'const name = (args) => { … }'),
+      snip('async fn', 'async function ${1:name}(${2:args}) {\n  $0\n}', 'async function name(args) { … }'),
+      snip('if', 'if (${1:condition}) {\n  $0\n}', 'if (condition) { … }'),
+      snip('if/else', 'if (${1:condition}) {\n  $0\n} else {\n  \n}', 'if (condition) { … } else { … }'),
+      snip(
+        'if/else if/else',
+        'if (${1:condition}) {\n  $0\n} else if (${2:condition}) {\n  \n} else {\n  \n}',
+        'if / else if / else chain',
+      ),
+      snip('for', 'for (let ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++) {\n  $0\n}', 'for (let i = 0; i < n; i++) { … }'),
+      snip('for...of', 'for (const ${1:item} of ${2:items}) {\n  $0\n}', 'for (const item of items) { … }'),
+      snip('for...in', 'for (const ${1:key} in ${2:object}) {\n  $0\n}', 'for (const key in object) { … }'),
+      snip('while', 'while (${1:condition}) {\n  $0\n}', 'while (condition) { … }'),
+      snip('do...while', 'do {\n  $0\n} while (${1:condition});', 'do { … } while (condition);'),
+      snip(
+        'switch',
+        'switch (${1:value}) {\n  case ${2:match}:\n    $0\n    break;\n  default:\n    break;\n}',
+        'switch (value) { case … }',
+      ),
+      snip('try/catch', 'try {\n  $0\n} catch (${1:error}) {\n  \n}', 'try { … } catch (error) { … }'),
+      snip(
+        'class',
+        'class ${1:Name} {\n  constructor(${2:args}) {\n    $0\n  }\n}',
+        'class Name { constructor(args) { … } }',
+      ),
+      snip('map', '${1:items}.map((${2:item}) => $0)', 'items.map(item => …)'),
+      snip('filter', '${1:items}.filter((${2:item}) => $0)', 'items.filter(item => …)'),
+      snip('reduce', '${1:items}.reduce((${2:acc}, ${3:item}) => $0, ${4:0})', 'items.reduce((acc, item) => …, 0)'),
+      snip('console.log', 'console.log($0);', 'console.log(value);'),
+      snip('setTimeout', 'setTimeout(() => {\n  $0\n}, ${1:delay});', 'setTimeout(() => { … }, delay)'),
+    ],
+    python: [
+      snip('def', 'def ${1:name}(${2:args}):\n    $0', 'def name(args): …'),
+      snip('if', 'if ${1:condition}:\n    $0', 'if condition: …'),
+      snip('if/else', 'if ${1:condition}:\n    $0\nelse:\n    ', 'if condition: … else: …'),
+      snip(
+        'if/elif/else',
+        'if ${1:condition}:\n    $0\nelif ${2:condition}:\n    \nelse:\n    ',
+        'if / elif / else chain',
+      ),
+      snip('for', 'for ${1:item} in ${2:items}:\n    $0', 'for item in items: …'),
+      snip('while', 'while ${1:condition}:\n    $0', 'while condition: …'),
+      snip(
+        'try/except',
+        'try:\n    $0\nexcept ${1:Exception} as ${2:error}:\n    ',
+        'try: … except Exception as error: …',
+      ),
+      snip('with', 'with open(${1:path}) as ${2:file}:\n    $0', 'with open(path) as file: …'),
+      snip('class', 'class ${1:Name}:\n    def __init__(self, ${2:args}):\n        $0', 'class Name: def __init__ …'),
+      snip('list comp', '[${1:expr} for ${2:item} in ${3:items}]', '[expr for item in items]'),
+      snip('dict comp', '{${1:key}: ${2:value} for ${3:item} in ${4:items}}', '{key: value for item in items}'),
+      snip('lambda', 'lambda ${1:args}: $0', 'lambda args: expression'),
+      snip('main guard', 'if __name__ == "__main__":\n    $0', 'if __name__ == "__main__": …'),
+      snip('print', 'print($0)', 'print(value)'),
+    ],
+    csharp: [
+      snip(
+        'method',
+        'public static ${1:ReturnType} ${2:Name}(${3:args})\n{\n    $0\n}',
+        'public static ReturnType Name(args) { … }',
+      ),
+      snip('if', 'if (${1:condition})\n{\n    $0\n}', 'if (condition) { … }'),
+      snip('if/else', 'if (${1:condition})\n{\n    $0\n}\nelse\n{\n    \n}', 'if (condition) { … } else { … }'),
+      snip(
+        'for',
+        'for (int ${1:i} = 0; ${1:i} < ${2:length}; ${1:i}++)\n{\n    $0\n}',
+        'for (int i = 0; i < length; i++) { … }',
+      ),
+      snip('foreach', 'foreach (var ${1:item} in ${2:items})\n{\n    $0\n}', 'foreach (var item in items) { … }'),
+      snip('while', 'while (${1:condition})\n{\n    $0\n}', 'while (condition) { … }'),
+      snip(
+        'switch',
+        'switch (${1:value})\n{\n    case ${2:match}:\n        $0\n        break;\n    default:\n        break;\n}',
+        'switch (value) { case … }',
+      ),
+      snip(
+        'try/catch',
+        'try\n{\n    $0\n}\ncatch (${1:Exception} ex)\n{\n    \n}',
+        'try { … } catch (Exception ex) { … }',
+      ),
+      snip('class', 'public class ${1:Name}\n{\n    $0\n}', 'public class Name { … }'),
+      snip('linq', '${1:items}.Where(${2:item} => $0)', 'items.Where(item => …)'),
+      snip('Console.WriteLine', 'Console.WriteLine($0);', 'Console.WriteLine(value);'),
+    ],
+    cpp: [
+      snip('main', 'int main() {\n    $0\n    return 0;\n}', 'int main() { … }'),
+      snip('function', '${1:int} ${2:name}(${3:args}) {\n    $0\n}', 'int name(args) { … }'),
+      snip('if', 'if (${1:condition}) {\n    $0\n}', 'if (condition) { … }'),
+      snip('if/else', 'if (${1:condition}) {\n    $0\n} else {\n    \n}', 'if (condition) { … } else { … }'),
+      snip('for', 'for (int ${1:i} = 0; ${1:i} < ${2:n}; ++${1:i}) {\n    $0\n}', 'for (int i = 0; i < n; ++i) { … }'),
+      snip(
+        'range for',
+        'for (const auto& ${1:item} : ${2:items}) {\n    $0\n}',
+        'for (const auto& item : items) { … }',
+      ),
+      snip('while', 'while (${1:condition}) {\n    $0\n}', 'while (condition) { … }'),
+      snip(
+        'switch',
+        'switch (${1:value}) {\n    case ${2:match}:\n        $0\n        break;\n    default:\n        break;\n}',
+        'switch (value) { case … }',
+      ),
+      snip(
+        'try/catch',
+        'try {\n    $0\n} catch (const ${1:std::exception}& ${2:e}) {\n    \n}',
+        'try { … } catch (const std::exception& e) { … }',
+      ),
+      snip(
+        'class',
+        'class ${1:Name} {\npublic:\n    ${2:Name}(${3:args}) {\n        $0\n    }\n};',
+        'class Name { public: Name(args) { … } };',
+      ),
+      snip('cout', 'cout << ${1:value} << endl;', 'cout << value << endl;'),
+      snip('vector', 'vector<${1:int}> ${2:values};', 'vector<int> values;'),
+    ],
+    java: [
+      snip(
+        'main',
+        'public static void main(String[] args) {\n    $0\n}',
+        'public static void main(String[] args) { … }',
+      ),
+      snip(
+        'method',
+        'public static ${1:ReturnType} ${2:name}(${3:args}) {\n    $0\n}',
+        'public static ReturnType name(args) { … }',
+      ),
+      snip('if', 'if (${1:condition}) {\n    $0\n}', 'if (condition) { … }'),
+      snip('if/else', 'if (${1:condition}) {\n    $0\n} else {\n    \n}', 'if (condition) { … } else { … }'),
+      snip('for', 'for (int ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++) {\n    $0\n}', 'for (int i = 0; i < n; i++) { … }'),
+      snip('for-each', 'for (${1:Type} ${2:item} : ${3:items}) {\n    $0\n}', 'for (Type item : items) { … }'),
+      snip('while', 'while (${1:condition}) {\n    $0\n}', 'while (condition) { … }'),
+      snip(
+        'switch',
+        'switch (${1:value}) {\n    case ${2:match}:\n        $0\n        break;\n    default:\n        break;\n}',
+        'switch (value) { case … }',
+      ),
+      snip(
+        'try/catch',
+        'try {\n    $0\n} catch (${1:Exception} ${2:e}) {\n    \n}',
+        'try { … } catch (Exception e) { … }',
+      ),
+      snip(
+        'class',
+        'public class ${1:Name} {\n    public ${1:Name}(${2:args}) {\n        $0\n    }\n}',
+        'public class Name { public Name(args) { … } }',
+      ),
+      snip('println', 'System.out.println($0);', 'System.out.println(value);'),
+      snip('list', 'List<${1:String}> ${2:items} = new ArrayList<>();', 'List<String> items = new ArrayList<>();'),
+    ],
+    php: [
+      snip('function', 'function ${1:name}(${2:args}) {\n    $0\n}', 'function name(args) { … }'),
+      snip('if', 'if (${1:condition}) {\n    $0\n}', 'if (condition) { … }'),
+      snip('if/else', 'if (${1:condition}) {\n    $0\n} else {\n    \n}', 'if (condition) { … } else { … }'),
+      snip('for', 'for ($${1:i} = 0; $${1:i} < ${2:n}; $${1:i}++) {\n    $0\n}', 'for ($i = 0; $i < n; $i++) { … }'),
+      snip('foreach', 'foreach ($${1:items} as $${2:item}) {\n    $0\n}', 'foreach ($items as $item) { … }'),
+      snip('while', 'while (${1:condition}) {\n    $0\n}', 'while (condition) { … }'),
+      snip(
+        'switch',
+        'switch ($${1:value}) {\n    case ${2:match}:\n        $0\n        break;\n    default:\n        break;\n}',
+        'switch ($value) { case … }',
+      ),
+      snip(
+        'try/catch',
+        'try {\n    $0\n} catch (${1:Exception} $${2:e}) {\n    \n}',
+        'try { … } catch (Exception $e) { … }',
+      ),
+      snip(
+        'class',
+        'class ${1:Name} {\n    public function ${2:method}($${3:args}) {\n        $0\n    }\n}',
+        'class Name { public function method($args) { … } }',
+      ),
+      snip('echo', 'echo $${1:value};', 'echo $value;'),
+    ],
+    ruby: [
+      snip('def', 'def ${1:name}(${2:args})\n  $0\nend', 'def name(args) … end'),
+      snip('if', 'if ${1:condition}\n  $0\nend', 'if condition … end'),
+      snip('if/else', 'if ${1:condition}\n  $0\nelse\n  \nend', 'if condition … else … end'),
+      snip(
+        'if/elsif/else',
+        'if ${1:condition}\n  $0\nelsif ${2:condition}\n  \nelse\n  \nend',
+        'if / elsif / else chain',
+      ),
+      snip('unless', 'unless ${1:condition}\n  $0\nend', 'unless condition … end'),
+      snip('for', 'for ${1:item} in ${2:items}\n  $0\nend', 'for item in items … end'),
+      snip('while', 'while ${1:condition}\n  $0\nend', 'while condition … end'),
+      snip('each', '${1:items}.each do |${2:item}|\n  $0\nend', 'items.each do |item| … end'),
+      snip('map', '${1:items}.map { |${2:item}| $0 }', 'items.map { |item| … }'),
+      snip('case', 'case ${1:value}\nwhen ${2:match}\n  $0\nelse\n  \nend', 'case value when … end'),
+      snip(
+        'begin/rescue',
+        'begin\n  $0\nrescue ${1:StandardError} => ${2:e}\n  \nend',
+        'begin … rescue StandardError => e … end',
+      ),
+      snip('class', 'class ${1:Name}\n  def initialize(${2:args})\n    $0\n  end\nend', 'class Name … end'),
+    ],
+    swift: [
+      snip('func', 'func ${1:name}(${2:args}) -> ${3:ReturnType} {\n    $0\n}', 'func name(args) -> ReturnType { … }'),
+      snip('if', 'if ${1:condition} {\n    $0\n}', 'if condition { … }'),
+      snip('if/else', 'if ${1:condition} {\n    $0\n} else {\n    \n}', 'if condition { … } else { … }'),
+      snip(
+        'guard',
+        'guard let ${1:value} = ${2:optional} else {\n    return\n}\n$0',
+        'guard let value = optional else { return }',
+      ),
+      snip('for', 'for ${1:item} in ${2:items} {\n    $0\n}', 'for item in items { … }'),
+      snip('while', 'while ${1:condition} {\n    $0\n}', 'while condition { … }'),
+      snip(
+        'switch',
+        'switch ${1:value} {\ncase ${2:match}:\n    $0\ndefault:\n    break\n}',
+        'switch value { case … }',
+      ),
+      snip('do/catch', 'do {\n    $0\n} catch {\n    \n}', 'do { … } catch { … }'),
+      snip('struct', 'struct ${1:Name} {\n    $0\n}', 'struct Name { … }'),
+      snip(
+        'class',
+        'class ${1:Name} {\n    init(${2:args}) {\n        $0\n    }\n}',
+        'class Name { init(args) { … } }',
+      ),
     ],
   };
-}
 
-function applySnippet(from, to, body) {
-  if (!view) return;
-  const parsed = parseSnippet(body);
-  const first = parsed.stops[0];
-  const onlyCursor = Boolean(first && first.final);
-  const anchor = from + (first ? first.from : parsed.cursor);
-  const head = first ? from + first.to : anchor;
-  const selection = first && !onlyCursor ? selectionFor(absoluteStop(first, from).ranges) : { anchor, head };
-  view.dispatch({
-    changes: { from, to, insert: parsed.text },
-    selection,
-  });
-  if (first && !onlyCursor) {
-    snippetSession = {
-      stops: parsed.stops.map((stop) => absoluteStop(stop, from)),
-      index: 0,
-    };
-  } else {
-    snippetSession = null;
+  const KIND_RANK = { snippet: 0, function: 1, method: 2, property: 3, class: 4, module: 5, variable: 6, keyword: 7 };
+  const KIND_BADGE = {
+    function: 'ƒ',
+    method: 'm',
+    property: 'p',
+    class: 'C',
+    module: 'M',
+    variable: 'v',
+    keyword: 'k',
+    snippet: 's',
+  };
+
+  const state = {
+    theme: 'default',
+    fontSize: 15,
+    completions: true,
+    smooth: true,
+    diagnostics: true,
+    open: false,
+  };
+
+  let view = null;
+  let editorEl = null;
+  let editorContent = null;
+  let language = 'javascript';
+  let appliedKey = '';
+  let host = null;
+  let panel = null;
+  let completionHost = null;
+  let completionList = null;
+  let completionDocs = null;
+  let completionItems = [];
+  let completionPrefix = '';
+  let completionIndex = 0;
+  let ghostHost = null;
+  let ghostText = null;
+  let snippetSession = null;
+  let paletteHost = null;
+  let paletteInput = null;
+  let paletteResults = null;
+  let paletteCommands = [];
+  let paletteIndex = 0;
+  let paletteMode = 'command';
+  let diagnostics = [];
+  let diagnosticsTimer = null;
+  let diagnosticHost = null;
+  let lastCheckedText = null;
+  let toastHost = null;
+  let toastTimer = null;
+
+  function findEditor() {
+    const content =
+      document.querySelector('#challenge-code-editor .cm-content') ||
+      document.querySelector('.ed-challenge-code__editor-frame .cm-content') ||
+      document.querySelector('.cm-content');
+    const foundView = content?.cmTile?.root?.view;
+    if (!foundView) return null;
+    return { view: foundView, content, editor: content.closest('.cm-editor') };
   }
-  scheduleDiagnostics();
-}
 
-function insertSnippet(text) {
-  if (!view) return;
-  hideCompletion();
-  const selection = view.state.selection.main;
-  applySnippet(selection.from, selection.to, text);
-  view.focus();
-}
+  function detectLanguage() {
+    const title = document.title;
+    if (/c#|csharp/i.test(title)) return 'csharp';
+    if (/c\+\+|cpp/i.test(title)) return 'cpp';
+    if (/javascript/i.test(title)) return 'javascript';
+    if (/python/i.test(title)) return 'python';
+    if (/\bjava\b/i.test(title)) return 'java';
+    if (/php/i.test(title)) return 'php';
+    if (/ruby/i.test(title)) return 'ruby';
+    if (/swift/i.test(title)) return 'swift';
+    return 'javascript';
+  }
 
-function endSnippet() {
-  snippetSession = null;
-}
-
-function advanceSnippet() {
-  if (!snippetSession || !view) return false;
-  const stops = snippetSession.stops;
-  const current = stops[snippetSession.index];
-  if (current) {
-    const primary = current.ranges[0];
-    const selection = view.state.selection.ranges[0];
-    const oldLength = primary.to - primary.from;
-    const typedLength = selection ? selection.head - primary.from : oldLength;
-    const newLength = Math.max(0, typedLength);
-    const growth = newLength - oldLength;
-    for (const range of current.ranges) range.to = range.from + newLength;
-    if (growth !== 0) {
-      for (let i = snippetSession.index + 1; i < stops.length; i += 1) {
-        for (const range of stops[i].ranges) {
-          let shift = 0;
-          for (const currentRange of current.ranges) {
-            if (currentRange.from < range.from) shift += growth;
-          }
-          range.from = Math.max(0, range.from + shift);
-          range.to = Math.max(0, range.to + shift);
-        }
+  function loadSettings() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
+      if (saved) {
+        if (saved.theme === 'dark' || saved.theme === 'default') state.theme = saved.theme;
+        if (Number.isFinite(saved.fontSize)) state.fontSize = Math.min(24, Math.max(12, saved.fontSize));
+        if (typeof saved.completions === 'boolean') state.completions = saved.completions;
+        if (typeof saved.smooth === 'boolean') state.smooth = saved.smooth;
+        if (typeof saved.diagnostics === 'boolean') state.diagnostics = saved.diagnostics;
       }
+    } catch {
+      /* ignore unreadable settings */
+    }
+    syncControls();
+    applySettings(true);
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(
+        SETTINGS_KEY,
+        JSON.stringify({
+          theme: state.theme,
+          fontSize: state.fontSize,
+          completions: state.completions,
+          smooth: state.smooth,
+          diagnostics: state.diagnostics,
+        }),
+      );
+    } catch {
+      /* storage can be unavailable in private mode */
     }
   }
-  const nextIndex = snippetSession.index + 1;
-  if (nextIndex >= stops.length) {
-    snippetSession = null;
-    return true;
-  }
-  snippetSession.index = nextIndex;
-  const ranges = stops[nextIndex].ranges;
-  const limit = view.state.doc.length;
-  if (ranges.some((range) => range.from > limit || range.to > limit)) {
-    snippetSession = null;
-    return false;
-  }
-  view.dispatch({ selection: selectionFor(ranges) });
-  if (stops[nextIndex].final) snippetSession = null;
-  return true;
-}
 
-const BRACKET_MATCH = { ')': '(', ']': '[', '}': '{' };
-const BRACKET_CLOSE = { '(': ')', '[': ']', '{': '}' };
-
-function commentTokensFor(lang) {
-  if (lang === 'python' || lang === 'ruby') return ['#'];
-  if (lang === 'php') return ['#', '//'];
-  return ['//'];
-}
-
-function regexAllowedBefore(text, index) {
-  let cursor = index - 1;
-  while (cursor >= 0 && /\s/.test(text[cursor])) cursor -= 1;
-  if (cursor < 0) return true;
-  if ('([{=,:;!&|?+-*%^~<>'.includes(text[cursor])) return true;
-  const before = text.slice(Math.max(0, cursor - 9), cursor + 1);
-  return /\b(?:return|case|typeof|delete|void|new|yield|await|in|of)$/.test(before);
-}
-
-function scanSyntax(text, lang) {
-  const found = [];
-  const strings = [];
-  const stack = [];
-  const comments = commentTokensFor(lang);
-  const blockComments = lang !== 'python' && lang !== 'ruby';
-  const quotes = lang === 'javascript' ? ['"', "'", '`'] : ['"', "'"];
-  const length = text.length;
-  let index = 0;
-
-  while (index < length) {
-    const char = text[index];
-
-    if (comments.some((token) => text.startsWith(token, index))) {
-      const newline = text.indexOf('\n', index);
-      index = newline === -1 ? length : newline;
-      continue;
+  function applySettings(force = false) {
+    if (!view || !editorEl) return;
+    const key = `${state.theme}|${state.fontSize}|${state.smooth}`;
+    const changed = force || key !== appliedKey;
+    editorEl.classList.add('edx-enhanced');
+    editorEl.classList.toggle('edx-dark', state.theme === 'dark');
+    editorEl.classList.toggle('edx-smooth', state.smooth);
+    editorEl.style.setProperty('--edx-font-size', `${state.fontSize}px`);
+    if (changed) {
+      appliedKey = key;
+      requestAnimationFrame(() => {
+        view?.requestMeasure?.();
+        renderDiagnosticOverlay();
+      });
     }
+  }
 
-    if (blockComments && text.startsWith('/*', index)) {
-      const end = text.indexOf('*/', index + 2);
-      if (end === -1) {
-        const lineEnd = text.indexOf('\n', index);
-        found.push({
-          severity: 'error',
-          from: index,
-          to: Math.min(lineEnd === -1 ? length : lineEnd, index + 3),
-          message: 'Unterminated block comment',
-        });
-        index = length;
-      } else {
-        index = end + 2;
-      }
-      continue;
-    }
-
-    if ((lang === 'javascript' || lang === 'ruby' || lang === 'swift')
-      && char === '/' && regexAllowedBefore(text, index)) {
-      let cursor = index + 1;
-      let inClass = false;
-      let closed = false;
-      while (cursor < length) {
-        const next = text[cursor];
-        if (next === '\\') {
-          cursor += 2;
-          continue;
-        }
-        if (next === '\n') break;
-        if (next === '[') inClass = true;
-        else if (next === ']') inClass = false;
-        else if (next === '/' && !inClass) {
-          closed = true;
-          cursor += 1;
-          break;
-        }
-        cursor += 1;
-      }
-      if (closed) {
-        index = cursor;
-        while (index < length && /[a-z]/i.test(text[index])) index += 1;
+  function parseSnippet(text) {
+    let output = '';
+    let cursor = -1;
+    let hasCursor = false;
+    const stops = [];
+    let index = 0;
+    while (index < text.length) {
+      if (text.startsWith('$0', index)) {
+        cursor = output.length;
+        hasCursor = true;
+        index += 2;
         continue;
       }
-    }
-
-    if (lang === 'python' && (text.startsWith("'''", index) || text.startsWith('"""', index))) {
-      const quote = text.slice(index, index + 3);
-      const end = text.indexOf(quote, index + 3);
-      if (end === -1) {
-        const lineEnd = text.indexOf('\n', index);
-        found.push({
-          severity: 'error',
-          from: index,
-          to: Math.min(lineEnd === -1 ? length : lineEnd, index + 3),
-          message: 'Unterminated triple-quoted string',
-        });
-        strings.push({ from: index, to: length });
-        index = length;
-      } else {
-        strings.push({ from: index, to: end + 3 });
-        index = end + 3;
+      if (text[index] === '$' && text[index + 1] === '{') {
+        const end = text.indexOf('}', index + 2);
+        if (end > -1) {
+          const body = text.slice(index + 2, end);
+          const colon = body.indexOf(':');
+          const numberText = colon >= 0 ? body.slice(0, colon) : body;
+          const number = Number(numberText);
+          const value = colon >= 0 ? body.slice(colon + 1) : '';
+          if (Number.isFinite(number) && String(number) === numberText.trim()) {
+            if (number === 0) {
+              cursor = output.length;
+              hasCursor = true;
+            } else {
+              const from = output.length;
+              output += value;
+              const existing = stops.find((stop) => stop.index === number);
+              if (existing) existing.mirrors.push({ from, to: output.length });
+              else stops.push({ index: number, from, to: output.length, mirrors: [] });
+            }
+            index = end + 1;
+            continue;
+          }
+        }
       }
-      continue;
+      if (text[index] === '$' && /\d/.test(text[index + 1] || '')) {
+        const number = Number(text[index + 1]);
+        if (number === 0) {
+          cursor = output.length;
+          hasCursor = true;
+        } else {
+          const existing = stops.find((stop) => stop.index === number);
+          if (existing) existing.mirrors.push({ from: output.length, to: output.length });
+          else stops.push({ index: number, from: output.length, to: output.length, mirrors: [] });
+        }
+        index += 2;
+        continue;
+      }
+      output += text[index];
+      index += 1;
     }
+    stops.sort((a, b) => a.index - b.index);
+    if (hasCursor) stops.push({ index: Number.MAX_SAFE_INTEGER, from: cursor, to: cursor, mirrors: [], final: true });
+    return { text: output, cursor: hasCursor ? cursor : output.length, stops };
+  }
 
-    if (quotes.includes(char)) {
-      const lineEndAt = (at) => {
-        const newline = text.indexOf('\n', at);
-        return newline === -1 ? length : newline;
+  function selectionFor(ranges) {
+    try {
+      const Selection = view.state.selection.constructor;
+      if (ranges.length > 1) {
+        return Selection.create(ranges.map((range) => Selection.range(range.from, range.to)));
+      }
+      return Selection.range(ranges[0].from, ranges[0].to);
+    } catch {
+      return { anchor: ranges[0].from, head: ranges[0].to };
+    }
+  }
+
+  function absoluteStop(stop, offset) {
+    return {
+      final: Boolean(stop.final),
+      ranges: [
+        { from: offset + stop.from, to: offset + stop.to },
+        ...stop.mirrors.map((mirror) => ({ from: offset + mirror.from, to: offset + mirror.to })),
+      ],
+    };
+  }
+
+  function applySnippet(from, to, body) {
+    if (!view) return;
+    const parsed = parseSnippet(body);
+    const first = parsed.stops[0];
+    const onlyCursor = Boolean(first && first.final);
+    const anchor = from + (first ? first.from : parsed.cursor);
+    const head = first ? from + first.to : anchor;
+    const selection = first && !onlyCursor ? selectionFor(absoluteStop(first, from).ranges) : { anchor, head };
+    view.dispatch({
+      changes: { from, to, insert: parsed.text },
+      selection,
+    });
+    if (first && !onlyCursor) {
+      snippetSession = {
+        stops: parsed.stops.map((stop) => absoluteStop(stop, from)),
+        index: 0,
       };
-      if (char === '`') {
+    } else {
+      snippetSession = null;
+    }
+    scheduleDiagnostics();
+  }
+
+  function insertSnippet(text) {
+    if (!view) return;
+    hideCompletion();
+    const selection = view.state.selection.main;
+    applySnippet(selection.from, selection.to, text);
+    view.focus();
+  }
+
+  function endSnippet() {
+    snippetSession = null;
+  }
+
+  function advanceSnippet() {
+    if (!snippetSession || !view) return false;
+    const stops = snippetSession.stops;
+    const current = stops[snippetSession.index];
+    if (current) {
+      const primary = current.ranges[0];
+      const selection = view.state.selection.ranges[0];
+      const oldLength = primary.to - primary.from;
+      const typedLength = selection ? selection.head - primary.from : oldLength;
+      const newLength = Math.max(0, typedLength);
+      const growth = newLength - oldLength;
+      for (const range of current.ranges) range.to = range.from + newLength;
+      if (growth !== 0) {
+        for (let i = snippetSession.index + 1; i < stops.length; i += 1) {
+          for (const range of stops[i].ranges) {
+            let shift = 0;
+            for (const currentRange of current.ranges) {
+              if (currentRange.from < range.from) shift += growth;
+            }
+            range.from = Math.max(0, range.from + shift);
+            range.to = Math.max(0, range.to + shift);
+          }
+        }
+      }
+    }
+    const nextIndex = snippetSession.index + 1;
+    if (nextIndex >= stops.length) {
+      snippetSession = null;
+      return true;
+    }
+    snippetSession.index = nextIndex;
+    const ranges = stops[nextIndex].ranges;
+    const limit = view.state.doc.length;
+    if (ranges.some((range) => range.from > limit || range.to > limit)) {
+      snippetSession = null;
+      return false;
+    }
+    view.dispatch({ selection: selectionFor(ranges) });
+    if (stops[nextIndex].final) snippetSession = null;
+    return true;
+  }
+
+  const BRACKET_MATCH = { ')': '(', ']': '[', '}': '{' };
+  const BRACKET_CLOSE = { '(': ')', '[': ']', '{': '}' };
+
+  function commentTokensFor(lang) {
+    if (lang === 'python' || lang === 'ruby') return ['#'];
+    if (lang === 'php') return ['#', '//'];
+    return ['//'];
+  }
+
+  function regexAllowedBefore(text, index) {
+    let cursor = index - 1;
+    while (cursor >= 0 && /\s/.test(text[cursor])) cursor -= 1;
+    if (cursor < 0) return true;
+    if ('([{=,:;!&|?+-*%^~<>'.includes(text[cursor])) return true;
+    const before = text.slice(Math.max(0, cursor - 9), cursor + 1);
+    return /\b(?:return|case|typeof|delete|void|new|yield|await|in|of)$/.test(before);
+  }
+
+  function scanSyntax(text, lang) {
+    const found = [];
+    const strings = [];
+    const stack = [];
+    const comments = commentTokensFor(lang);
+    const blockComments = lang !== 'python' && lang !== 'ruby';
+    const quotes = lang === 'javascript' ? ['"', "'", '`'] : ['"', "'"];
+    const length = text.length;
+    let index = 0;
+
+    while (index < length) {
+      const char = text[index];
+
+      if (comments.some((token) => text.startsWith(token, index))) {
+        const newline = text.indexOf('\n', index);
+        index = newline === -1 ? length : newline;
+        continue;
+      }
+
+      if (blockComments && text.startsWith('/*', index)) {
+        const end = text.indexOf('*/', index + 2);
+        if (end === -1) {
+          const lineEnd = text.indexOf('\n', index);
+          found.push({
+            severity: 'error',
+            from: index,
+            to: Math.min(lineEnd === -1 ? length : lineEnd, index + 3),
+            message: 'Unterminated block comment',
+          });
+          index = length;
+        } else {
+          index = end + 2;
+        }
+        continue;
+      }
+
+      if (
+        (lang === 'javascript' || lang === 'ruby' || lang === 'swift') &&
+        char === '/' &&
+        regexAllowedBefore(text, index)
+      ) {
         let cursor = index + 1;
+        let inClass = false;
         let closed = false;
         while (cursor < length) {
-          if (text[cursor] === '\\') {
+          const next = text[cursor];
+          if (next === '\\') {
             cursor += 2;
             continue;
           }
-          if (text[cursor] === '`') {
+          if (next === '\n') break;
+          if (next === '[') inClass = true;
+          else if (next === ']') inClass = false;
+          else if (next === '/' && !inClass) {
             closed = true;
             cursor += 1;
             break;
           }
           cursor += 1;
         }
-        strings.push({ from: index, to: closed ? cursor : length });
-        if (!closed) {
+        if (closed) {
+          index = cursor;
+          while (index < length && /[a-z]/i.test(text[index])) index += 1;
+          continue;
+        }
+      }
+
+      if (lang === 'python' && (text.startsWith("'''", index) || text.startsWith('"""', index))) {
+        const quote = text.slice(index, index + 3);
+        const end = text.indexOf(quote, index + 3);
+        if (end === -1) {
+          const lineEnd = text.indexOf('\n', index);
           found.push({
             severity: 'error',
             from: index,
-            to: Math.min(lineEndAt(index), index + 40),
-            message: 'Unterminated template literal',
+            to: Math.min(lineEnd === -1 ? length : lineEnd, index + 3),
+            message: 'Unterminated triple-quoted string',
           });
+          strings.push({ from: index, to: length });
           index = length;
         } else {
+          strings.push({ from: index, to: end + 3 });
+          index = end + 3;
+        }
+        continue;
+      }
+
+      if (quotes.includes(char)) {
+        const lineEndAt = (at) => {
+          const newline = text.indexOf('\n', at);
+          return newline === -1 ? length : newline;
+        };
+        if (char === '`') {
+          let cursor = index + 1;
+          let closed = false;
+          while (cursor < length) {
+            if (text[cursor] === '\\') {
+              cursor += 2;
+              continue;
+            }
+            if (text[cursor] === '`') {
+              closed = true;
+              cursor += 1;
+              break;
+            }
+            cursor += 1;
+          }
+          strings.push({ from: index, to: closed ? cursor : length });
+          if (!closed) {
+            found.push({
+              severity: 'error',
+              from: index,
+              to: Math.min(lineEndAt(index), index + 40),
+              message: 'Unterminated template literal',
+            });
+            index = length;
+          } else {
+            index = cursor;
+          }
+          continue;
+        }
+
+        let cursor = index + 1;
+        let closed = false;
+        while (cursor < length) {
+          const next = text[cursor];
+          if (next === '\\') {
+            cursor += 2;
+            continue;
+          }
+          if (next === char) {
+            closed = true;
+            cursor += 1;
+            break;
+          }
+          if (next === '\n') break;
+          cursor += 1;
+        }
+        if (!closed) {
+          const lineEnd = lineEndAt(index);
+          found.push({
+            severity: 'error',
+            from: index,
+            to: Math.min(lineEnd, index + 40),
+            message: 'Unterminated string literal',
+          });
+          strings.push({ from: index, to: lineEnd });
+          index = lineEnd;
+        } else {
+          strings.push({ from: index, to: cursor });
           index = cursor;
         }
         continue;
       }
 
-      let cursor = index + 1;
-      let closed = false;
-      while (cursor < length) {
-        const next = text[cursor];
-        if (next === '\\') {
-          cursor += 2;
+      if ('([{'.includes(char)) {
+        stack.push({ char, at: index });
+      } else if (')]}'.includes(char)) {
+        const open = stack[stack.length - 1];
+        if (open && BRACKET_MATCH[char] === open.char) {
+          stack.pop();
+        } else if (open) {
+          found.push({
+            severity: 'error',
+            from: index,
+            to: index + 1,
+            message: `Expected '${BRACKET_CLOSE[open.char]}' but found '${char}'`,
+          });
+        } else {
+          found.push({
+            severity: 'error',
+            from: index,
+            to: index + 1,
+            message: `Unexpected '${char}'`,
+          });
+        }
+      }
+      index += 1;
+    }
+
+    for (const open of stack.slice(0, 8)) {
+      found.push({
+        severity: 'error',
+        from: open.at,
+        to: open.at + 1,
+        message: `Unclosed '${open.char}'`,
+      });
+    }
+
+    return { found, strings };
+  }
+
+  function stripLineComment(line, lang) {
+    const comments = commentTokensFor(lang);
+    let quote = null;
+    for (let index = 0; index < line.length; index += 1) {
+      const char = line[index];
+      if (quote) {
+        if (char === '\\') {
+          index += 1;
           continue;
         }
-        if (next === char) {
-          closed = true;
-          cursor += 1;
-          break;
+        if (char === quote) quote = null;
+        continue;
+      }
+      if (char === '"' || char === "'" || char === '`') {
+        quote = char;
+        continue;
+      }
+      if (comments.some((token) => line.startsWith(token, index))) return line.slice(0, index);
+    }
+    return line;
+  }
+
+  function hasTopLevelColon(code) {
+    let depth = 0;
+    let quote = null;
+    for (let index = 0; index < code.length; index += 1) {
+      const char = code[index];
+      if (quote) {
+        if (char === '\\') {
+          index += 1;
+          continue;
         }
-        if (next === '\n') break;
-        cursor += 1;
-      }
-      if (!closed) {
-        const lineEnd = lineEndAt(index);
-        found.push({
-          severity: 'error',
-          from: index,
-          to: Math.min(lineEnd, index + 40),
-          message: 'Unterminated string literal',
-        });
-        strings.push({ from: index, to: lineEnd });
-        index = lineEnd;
-      } else {
-        strings.push({ from: index, to: cursor });
-        index = cursor;
-      }
-      continue;
-    }
-
-    if ('([{'.includes(char)) {
-      stack.push({ char, at: index });
-    } else if (')]}'.includes(char)) {
-      const open = stack[stack.length - 1];
-      if (open && BRACKET_MATCH[char] === open.char) {
-        stack.pop();
-      } else if (open) {
-        found.push({
-          severity: 'error',
-          from: index,
-          to: index + 1,
-          message: `Expected '${BRACKET_CLOSE[open.char]}' but found '${char}'`,
-        });
-      } else {
-        found.push({
-          severity: 'error',
-          from: index,
-          to: index + 1,
-          message: `Unexpected '${char}'`,
-        });
-      }
-    }
-    index += 1;
-  }
-
-  for (const open of stack.slice(0, 8)) {
-    found.push({
-      severity: 'error',
-      from: open.at,
-      to: open.at + 1,
-      message: `Unclosed '${open.char}'`,
-    });
-  }
-
-  return { found, strings };
-}
-
-function stripLineComment(line, lang) {
-  const comments = commentTokensFor(lang);
-  let quote = null;
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    if (quote) {
-      if (char === '\\') {
-        index += 1;
+        if (char === quote) quote = null;
         continue;
       }
-      if (char === quote) quote = null;
-      continue;
-    }
-    if (char === '"' || char === "'" || char === '`') {
-      quote = char;
-      continue;
-    }
-    if (comments.some((token) => line.startsWith(token, index))) return line.slice(0, index);
-  }
-  return line;
-}
-
-function hasTopLevelColon(code) {
-  let depth = 0;
-  let quote = null;
-  for (let index = 0; index < code.length; index += 1) {
-    const char = code[index];
-    if (quote) {
-      if (char === '\\') {
-        index += 1;
+      if (char === '"' || char === "'" || char === '`') {
+        quote = char;
         continue;
       }
-      if (char === quote) quote = null;
-      continue;
+      if ('([{'.includes(char)) depth += 1;
+      else if (')]}'.includes(char)) depth = Math.max(0, depth - 1);
+      else if (char === ':' && depth === 0) return true;
     }
-    if (char === '"' || char === "'" || char === '`') {
-      quote = char;
-      continue;
-    }
-    if ('([{'.includes(char)) depth += 1;
-    else if (')]}'.includes(char)) depth = Math.max(0, depth - 1);
-    else if (char === ':' && depth === 0) return true;
+    return false;
   }
-  return false;
-}
 
-function bracketDepth(code) {
-  let depth = 0;
-  let quote = null;
-  for (let index = 0; index < code.length; index += 1) {
-    const char = code[index];
-    if (quote) {
-      if (char === '\\') {
-        index += 1;
+  function bracketDepth(code) {
+    let depth = 0;
+    let quote = null;
+    for (let index = 0; index < code.length; index += 1) {
+      const char = code[index];
+      if (quote) {
+        if (char === '\\') {
+          index += 1;
+          continue;
+        }
+        if (char === quote) quote = null;
         continue;
       }
-      if (char === quote) quote = null;
-      continue;
+      if (char === '"' || char === "'" || char === '`') {
+        quote = char;
+        continue;
+      }
+      if ('([{'.includes(char)) depth += 1;
+      else if (')]}'.includes(char)) depth = Math.max(0, depth - 1);
     }
-    if (char === '"' || char === "'" || char === '`') {
-      quote = char;
-      continue;
-    }
-    if ('([{'.includes(char)) depth += 1;
-    else if (')]}'.includes(char)) depth = Math.max(0, depth - 1);
+    return depth;
   }
-  return depth;
-}
 
-function checkPythonHeaders(text, lang, stringRanges) {
-  if (lang !== 'python') return [];
-  const found = [];
-  let offset = 0;
-  for (const line of text.split('\n')) {
-    const lineStart = offset;
-    offset += line.length + 1;
-    const inString = stringRanges.some((range) => lineStart > range.from && lineStart < range.to);
-    if (inString) continue;
-    const code = stripLineComment(line, 'python');
-    if (!code.trim()) continue;
-    if (/^\s*(?:match|case)\s*=/.test(code)) continue;
-    const header = code.match(/^\s*(?:(?:async\s+)?(?:def|for|with)|if|elif|else|while|class|try|except|finally|match|case)\b/);
-    if (!header || hasTopLevelColon(code)) continue;
-    const trimmed = code.replace(/\s+$/, '');
-    if (trimmed.endsWith('\\') || bracketDepth(trimmed) > 0) continue;
-    const leading = code.length - code.trimStart().length;
-    found.push({
-      severity: 'error',
-      from: lineStart + leading,
-      to: lineStart + Math.max(leading + 1, trimmed.length),
-      message: `Expected ':' after '${header[0].trim()}'`,
-    });
-  }
-  return found;
-}
-
-function collectWarnings(text) {
-  const found = [];
-  let offset = 0;
-  for (const line of text.split('\n')) {
-    const lineStart = offset;
-    offset += line.length + 1;
-    const todo = /\b(TODO|FIXME|HACK|XXX)\b/.exec(line);
-    if (todo) {
+  function checkPythonHeaders(text, lang, stringRanges) {
+    if (lang !== 'python') return [];
+    const found = [];
+    let offset = 0;
+    for (const line of text.split('\n')) {
+      const lineStart = offset;
+      offset += line.length + 1;
+      const inString = stringRanges.some((range) => lineStart > range.from && lineStart < range.to);
+      if (inString) continue;
+      const code = stripLineComment(line, 'python');
+      if (!code.trim()) continue;
+      if (/^\s*(?:match|case)\s*=/.test(code)) continue;
+      const header = code.match(
+        /^\s*(?:(?:async\s+)?(?:def|for|with)|if|elif|else|while|class|try|except|finally|match|case)\b/,
+      );
+      if (!header || hasTopLevelColon(code)) continue;
+      const trimmed = code.replace(/\s+$/, '');
+      if (trimmed.endsWith('\\') || bracketDepth(trimmed) > 0) continue;
+      const leading = code.length - code.trimStart().length;
       found.push({
-        severity: 'warning',
-        from: lineStart + todo.index,
-        to: lineStart + todo.index + todo[0].length,
-        message: `"${todo[1]}" comment left in code`,
+        severity: 'error',
+        from: lineStart + leading,
+        to: lineStart + Math.max(leading + 1, trimmed.length),
+        message: `Expected ':' after '${header[0].trim()}'`,
       });
     }
-    if (line.length > 120) {
-      found.push({
-        severity: 'warning',
-        from: lineStart + 120,
-        to: lineStart + line.length,
-        message: `Line is ${line.length} characters long (max 120)`,
-      });
-    }
-    const trailing = /[ \t]+$/.exec(line);
-    if (trailing && line.slice(0, trailing.index).trim()) {
-      found.push({
-        severity: 'warning',
-        from: lineStart + trailing.index,
-        to: lineStart + line.length,
-        message: 'Trailing whitespace',
-      });
-    }
+    return found;
   }
-  return found;
-}
 
-function analyzeDocument(text, lang) {
-  const syntax = scanSyntax(text, lang);
-  const all = [
-    ...syntax.found,
-    ...checkPythonHeaders(text, lang, syntax.strings),
-    ...collectWarnings(text),
-  ];
-  const seen = new Set();
-  const unique = [];
-  for (const item of all) {
-    const key = `${item.severity}:${item.from}:${item.to}:${item.message}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    unique.push(item);
+  function collectWarnings(text) {
+    const found = [];
+    let offset = 0;
+    for (const line of text.split('\n')) {
+      const lineStart = offset;
+      offset += line.length + 1;
+      const todo = /\b(TODO|FIXME|HACK|XXX)\b/.exec(line);
+      if (todo) {
+        found.push({
+          severity: 'warning',
+          from: lineStart + todo.index,
+          to: lineStart + todo.index + todo[0].length,
+          message: `"${todo[1]}" comment left in code`,
+        });
+      }
+      if (line.length > 120) {
+        found.push({
+          severity: 'warning',
+          from: lineStart + 120,
+          to: lineStart + line.length,
+          message: `Line is ${line.length} characters long (max 120)`,
+        });
+      }
+      const trailing = /[ \t]+$/.exec(line);
+      if (trailing && line.slice(0, trailing.index).trim()) {
+        found.push({
+          severity: 'warning',
+          from: lineStart + trailing.index,
+          to: lineStart + line.length,
+          message: 'Trailing whitespace',
+        });
+      }
+    }
+    return found;
   }
-  unique.sort((a, b) => a.from - b.from || (a.severity === 'error' ? -1 : 1));
-  return unique.slice(0, 80);
-}
 
-function scheduleDiagnostics(delay = 320) {
-  if (!state.diagnostics) {
-    diagnostics = [];
+  function analyzeDocument(text, lang) {
+    const syntax = scanSyntax(text, lang);
+    const all = [...syntax.found, ...checkPythonHeaders(text, lang, syntax.strings), ...collectWarnings(text)];
+    const seen = new Set();
+    const unique = [];
+    for (const item of all) {
+      const key = `${item.severity}:${item.from}:${item.to}:${item.message}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(item);
+    }
+    unique.sort((a, b) => a.from - b.from || (a.severity === 'error' ? -1 : 1));
+    return unique.slice(0, 80);
+  }
+
+  function scheduleDiagnostics(delay = 320) {
+    if (!state.diagnostics) {
+      diagnostics = [];
+      publishDiagnostics();
+      return;
+    }
+    if (diagnosticsTimer) clearTimeout(diagnosticsTimer);
+    diagnosticsTimer = setTimeout(() => {
+      diagnosticsTimer = null;
+      runDiagnostics();
+    }, delay);
+  }
+
+  function runDiagnostics() {
+    if (!state.diagnostics || !view) {
+      diagnostics = [];
+      lastCheckedText = view ? view.state.doc.toString() : null;
+      publishDiagnostics();
+      return;
+    }
+    const text = view.state.doc.toString();
+    lastCheckedText = text;
+    diagnostics = analyzeDocument(text, language);
     publishDiagnostics();
-    return;
   }
-  if (diagnosticsTimer) clearTimeout(diagnosticsTimer);
-  diagnosticsTimer = setTimeout(() => {
-    diagnosticsTimer = null;
-    runDiagnostics();
-  }, delay);
-}
 
-function runDiagnostics() {
-  if (!state.diagnostics || !view) {
-    diagnostics = [];
-    lastCheckedText = view ? view.state.doc.toString() : null;
-    publishDiagnostics();
-    return;
+  function publishDiagnostics() {
+    host?.__setProblems?.(diagnostics);
+    renderDiagnosticOverlay();
   }
-  const text = view.state.doc.toString();
-  lastCheckedText = text;
-  diagnostics = analyzeDocument(text, language);
-  publishDiagnostics();
-}
 
-function publishDiagnostics() {
-  host?.__setProblems?.(diagnostics);
-  renderDiagnosticOverlay();
-}
-
-function createDiagnosticHost() {
-  diagnosticHost = document.createElement('div');
-  diagnosticHost.id = 'edabit-ide-diagnostics';
-  diagnosticHost.hidden = true;
-  const shadow = diagnosticHost.attachShadow({ mode: 'open' });
-  shadow.innerHTML = `
+  function createDiagnosticHost() {
+    diagnosticHost = document.createElement('div');
+    diagnosticHost.id = 'edabit-ide-diagnostics';
+    diagnosticHost.hidden = true;
+    const shadow = diagnosticHost.attachShadow({ mode: 'open' });
+    shadow.innerHTML = `
     <style>
       :host { all: initial; position: fixed; inset: 0; z-index: 2147483645; pointer-events: none; overflow: hidden; }
       :host([hidden]) { display: none !important; }
@@ -805,81 +919,82 @@ function createDiagnosticHost() {
       .squiggle.warning { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3'%3E%3Cpath d='M0 2 L1.5 0 L3 2 L4.5 0 L6 2' fill='none' stroke='%23cca700' stroke-width='1'/%3E%3C/svg%3E"); }
     </style>
     <div class="layer"></div>`;
-  document.documentElement.append(diagnosticHost);
-}
-
-function renderDiagnosticOverlay() {
-  if (!diagnosticHost) createDiagnosticHost();
-  const layer = diagnosticHost.shadowRoot.querySelector('.layer');
-  layer.replaceChildren();
-  if (!state.diagnostics || !view || !editorEl || !diagnostics.length) {
-    diagnosticHost.hidden = true;
-    return;
+    document.documentElement.append(diagnosticHost);
   }
-  const editorRect = editorEl.getBoundingClientRect();
-  const doc = view.state.doc;
-  for (const item of diagnostics) {
-    const from = Math.max(0, Math.min(item.from, doc.length));
-    const to = Math.max(from, Math.min(item.to, doc.length));
-    const firstLine = doc.lineAt(from).number;
-    const lastLine = doc.lineAt(Math.max(from, to - 1)).number;
-    for (let lineNumber = firstLine; lineNumber <= lastLine; lineNumber += 1) {
-      const line = doc.line(lineNumber);
-      const segmentFrom = Math.max(from, line.from);
-      const segmentTo = Math.min(to, line.to);
-      const start = view.coordsAtPos(segmentFrom);
-      if (!start) continue;
-      let end = view.coordsAtPos(segmentTo) || start;
-      if (Math.abs(end.top - start.top) > 4 || end.left < start.left) {
-        const lineEnd = view.coordsAtPos(line.to);
-        if (lineEnd && Math.abs(lineEnd.top - start.top) < 4) end = lineEnd;
-        else end = { left: start.left + 14, top: start.top, bottom: start.bottom };
-      }
-      if (start.bottom < editorRect.top || start.top > editorRect.bottom) continue;
-      const left = Math.max(editorRect.left + 1, Math.min(start.left, end.left));
-      const right = Math.min(editorRect.right - 1, Math.max(start.left, end.left));
-      if (right - left < 2) continue;
-      const top = Math.max(editorRect.top, Math.min(start.bottom - 2, editorRect.bottom - 3));
-      const squiggle = document.createElement('div');
-      squiggle.className = `squiggle ${item.severity}`;
-      squiggle.style.left = `${left}px`;
-      squiggle.style.top = `${top}px`;
-      squiggle.style.width = `${right - left}px`;
-      layer.append(squiggle);
+
+  function renderDiagnosticOverlay() {
+    if (!diagnosticHost) createDiagnosticHost();
+    const layer = diagnosticHost.shadowRoot.querySelector('.layer');
+    layer.replaceChildren();
+    if (!state.diagnostics || !view || !editorEl || !diagnostics.length) {
+      diagnosticHost.hidden = true;
+      return;
     }
+    const editorRect = editorEl.getBoundingClientRect();
+    const doc = view.state.doc;
+    for (const item of diagnostics) {
+      const from = Math.max(0, Math.min(item.from, doc.length));
+      const to = Math.max(from, Math.min(item.to, doc.length));
+      const firstLine = doc.lineAt(from).number;
+      const lastLine = doc.lineAt(Math.max(from, to - 1)).number;
+      for (let lineNumber = firstLine; lineNumber <= lastLine; lineNumber += 1) {
+        const line = doc.line(lineNumber);
+        const segmentFrom = Math.max(from, line.from);
+        const segmentTo = Math.min(to, line.to);
+        const start = view.coordsAtPos(segmentFrom);
+        if (!start) continue;
+        let end = view.coordsAtPos(segmentTo) || start;
+        if (Math.abs(end.top - start.top) > 4 || end.left < start.left) {
+          const lineEnd = view.coordsAtPos(line.to);
+          if (lineEnd && Math.abs(lineEnd.top - start.top) < 4) end = lineEnd;
+          else end = { left: start.left + 14, top: start.top, bottom: start.bottom };
+        }
+        if (start.bottom < editorRect.top || start.top > editorRect.bottom) continue;
+        const left = Math.max(editorRect.left + 1, Math.min(start.left, end.left));
+        const right = Math.min(editorRect.right - 1, Math.max(start.left, end.left));
+        if (right - left < 2) continue;
+        const top = Math.max(editorRect.top, Math.min(start.bottom - 2, editorRect.bottom - 3));
+        const squiggle = document.createElement('div');
+        squiggle.className = `squiggle ${item.severity}`;
+        squiggle.style.left = `${left}px`;
+        squiggle.style.top = `${top}px`;
+        squiggle.style.width = `${right - left}px`;
+        layer.append(squiggle);
+      }
+    }
+    diagnosticHost.hidden = layer.childElementCount === 0;
   }
-  diagnosticHost.hidden = layer.childElementCount === 0;
-}
 
-function revealDiagnostic(item) {
-  if (!view || !item) return;
-  const max = view.state.doc.length;
-  const from = Math.max(0, Math.min(item.from, max));
-  const to = Math.min(Math.max(item.to, from), max);
-  view.dispatch({ selection: { anchor: from, head: to }, scrollIntoView: true });
-  view.focus();
-}
-
-function goToProblem(direction) {
-  if (!view || !diagnostics.length) return false;
-  const sorted = [...diagnostics].sort((a, b) => a.from - b.from);
-  const head = view.state.selection.main.head;
-  let target;
-  if (direction > 0) {
-    target = sorted.find((item) => item.from > head) || sorted[0];
-  } else {
-    const before = sorted.filter((item) => item.to < head);
-    target = before[before.length - 1] || sorted[sorted.length - 1];
+  function revealDiagnostic(item) {
+    if (!view || !item) return;
+    const max = view.state.doc.length;
+    const from = Math.max(0, Math.min(item.from, max));
+    const to = Math.min(Math.max(item.to, from), max);
+    view.dispatch({ selection: { anchor: from, head: to }, scrollIntoView: true });
+    view.focus();
   }
-  revealDiagnostic(target);
-  return true;
-}
 
-function createToolbar() {  host = document.createElement('div');
-  host.id = HOST_ID;
-  host.hidden = true;
-  const shadow = host.attachShadow({ mode: 'open' });
-  shadow.innerHTML = `
+  function goToProblem(direction) {
+    if (!view || !diagnostics.length) return false;
+    const sorted = [...diagnostics].sort((a, b) => a.from - b.from);
+    const head = view.state.selection.main.head;
+    let target;
+    if (direction > 0) {
+      target = sorted.find((item) => item.from > head) || sorted[0];
+    } else {
+      const before = sorted.filter((item) => item.to < head);
+      target = before[before.length - 1] || sorted[sorted.length - 1];
+    }
+    revealDiagnostic(target);
+    return true;
+  }
+
+  function createToolbar() {
+    host = document.createElement('div');
+    host.id = HOST_ID;
+    host.hidden = true;
+    const shadow = host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = `
     <style>
       :host { all: initial; }
       :host([hidden]) { display: none !important; }
@@ -909,6 +1024,8 @@ function createToolbar() {  host = document.createElement('div');
       .stepper button { width: 24px; height: 24px; border: 1px solid #333d4d; border-radius: 6px; background: #1d2430; color: #dbe4f0; cursor: pointer; font: inherit; }
       .stepper button:hover { background: #273040; }
       .stepper output { min-width: 22px; text-align: center; color: #e8eef7; font-variant-numeric: tabular-nums; }
+      .mini { border: 1px solid #333d4d; border-radius: 7px; background: #1d2430; color: #cfd9e6; font: inherit; font-size: 11px; padding: 4px 9px; cursor: pointer; }
+      .mini:hover { background: #273040; border-color: #4a5a72; color: #fff; }
       .snippets { margin-top: 8px; padding-top: 10px; border-top: 1px solid #28313f; }
       .snippets > span { display: block; color: #8a97ab; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 7px; }
       .snippet-list { display: flex; flex-wrap: wrap; gap: 6px; max-height: 132px; overflow: auto; scrollbar-width: thin; }
@@ -941,6 +1058,7 @@ function createToolbar() {  host = document.createElement('div');
         <label class="row"><span>Word completion</span><input id="completions" type="checkbox"></label>
         <label class="row"><span>Smooth typing</span><input id="smooth" type="checkbox"></label>
         <label class="row"><span>Check errors &amp; warnings</span><input id="diagnostics" type="checkbox"></label>
+        <div class="row"><span>Format document</span><button class="mini" id="format" type="button">Prettier</button></div>
         <div class="problems">
           <div class="problems-head"><span>Problems</span><span class="summary" id="problem-summary">No problems</span></div>
           <div class="problem-list" id="problem-list"></div>
@@ -952,200 +1070,290 @@ function createToolbar() {  host = document.createElement('div');
       <button class="pill" type="button"><span class="dot"></span>Editor+<span class="issue error" id="issue-error" hidden></span><span class="issue warning" id="issue-warning" hidden></span></button>
     </div>`;
 
-  panel = shadow.querySelector('.panel');
-  const pill = shadow.querySelector('.pill');
-  const langLabel = shadow.querySelector('#lang');
-  const sizeOutput = shadow.querySelector('#size');
-  const completionsInput = shadow.querySelector('#completions');
-  const smoothInput = shadow.querySelector('#smooth');
-  const diagnosticsInput = shadow.querySelector('#diagnostics');
-  const snippetList = shadow.querySelector('#snippet-list');
-  const problemList = shadow.querySelector('#problem-list');
-  const problemSummary = shadow.querySelector('#problem-summary');
-  const issueError = shadow.querySelector('#issue-error');
-  const issueWarning = shadow.querySelector('#issue-warning');
+    panel = shadow.querySelector('.panel');
+    const pill = shadow.querySelector('.pill');
+    const langLabel = shadow.querySelector('#lang');
+    const sizeOutput = shadow.querySelector('#size');
+    const completionsInput = shadow.querySelector('#completions');
+    const smoothInput = shadow.querySelector('#smooth');
+    const diagnosticsInput = shadow.querySelector('#diagnostics');
+    const snippetList = shadow.querySelector('#snippet-list');
+    const problemList = shadow.querySelector('#problem-list');
+    const problemSummary = shadow.querySelector('#problem-summary');
+    const issueError = shadow.querySelector('#issue-error');
+    const issueWarning = shadow.querySelector('#issue-warning');
 
-  const updateIssueBadges = (items) => {
-    const errors = items.filter((item) => item.severity === 'error').length;
-    const warnings = items.filter((item) => item.severity === 'warning').length;
-    issueError.hidden = errors === 0;
-    issueWarning.hidden = warnings === 0;
-    issueError.textContent = String(errors);
-    issueWarning.textContent = String(warnings);
-    pill.classList.toggle('has-errors', errors > 0);
-    pill.classList.toggle('has-warnings', errors === 0 && warnings > 0);
-    const parts = [];
-    if (errors) parts.push(`${errors} error${errors === 1 ? '' : 's'}`);
-    if (warnings) parts.push(`${warnings} warning${warnings === 1 ? '' : 's'}`);
-    pill.title = parts.length ? parts.join(', ') : 'No problems detected';
-  };
+    const updateIssueBadges = (items) => {
+      const errors = items.filter((item) => item.severity === 'error').length;
+      const warnings = items.filter((item) => item.severity === 'warning').length;
+      issueError.hidden = errors === 0;
+      issueWarning.hidden = warnings === 0;
+      issueError.textContent = String(errors);
+      issueWarning.textContent = String(warnings);
+      pill.classList.toggle('has-errors', errors > 0);
+      pill.classList.toggle('has-warnings', errors === 0 && warnings > 0);
+      const parts = [];
+      if (errors) parts.push(`${errors} error${errors === 1 ? '' : 's'}`);
+      if (warnings) parts.push(`${warnings} warning${warnings === 1 ? '' : 's'}`);
+      pill.title = parts.length ? parts.join(', ') : 'No problems detected';
+    };
 
-  const renderProblems = (items) => {
-    const errors = items.filter((item) => item.severity === 'error').length;
-    const warnings = items.filter((item) => item.severity === 'warning').length;
-    if (!state.diagnostics) {
-      problemSummary.textContent = 'Checking off';
-    } else if (!items.length) {
-      problemSummary.textContent = 'No problems';
-    } else {
-      problemSummary.textContent = [
-        errors ? `${errors} error${errors === 1 ? '' : 's'}` : '',
-        warnings ? `${warnings} warning${warnings === 1 ? '' : 's'}` : '',
-      ].filter(Boolean).join(' · ');
-    }
-    if (!items.length) {
-      const empty = document.createElement('div');
-      empty.className = 'problem-empty';
-      empty.textContent = state.diagnostics ? 'No problems detected' : 'Error checking is disabled';
-      problemList.replaceChildren(empty);
+    const renderProblems = (items) => {
+      const errors = items.filter((item) => item.severity === 'error').length;
+      const warnings = items.filter((item) => item.severity === 'warning').length;
+      if (!state.diagnostics) {
+        problemSummary.textContent = 'Checking off';
+      } else if (!items.length) {
+        problemSummary.textContent = 'No problems';
+      } else {
+        problemSummary.textContent = [
+          errors ? `${errors} error${errors === 1 ? '' : 's'}` : '',
+          warnings ? `${warnings} warning${warnings === 1 ? '' : 's'}` : '',
+        ]
+          .filter(Boolean)
+          .join(' · ');
+      }
+      if (!items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'problem-empty';
+        empty.textContent = state.diagnostics ? 'No problems detected' : 'Error checking is disabled';
+        problemList.replaceChildren(empty);
+        return;
+      }
+      const rows = items.map((item) => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'problem';
+        row.title = item.message;
+        const severity = document.createElement('span');
+        severity.className = `sev ${item.severity}`;
+        severity.textContent = item.severity === 'error' ? '✕' : '⚠';
+        const message = document.createElement('span');
+        message.className = 'msg';
+        message.textContent = item.message;
+        const line = document.createElement('span');
+        line.className = 'ln';
+        line.textContent = String(view ? view.state.doc.lineAt(Math.min(item.from, view.state.doc.length)).number : '');
+        row.append(severity, message, line);
+        row.addEventListener('click', () => revealDiagnostic(item));
+        return row;
+      });
+      problemList.replaceChildren(...rows);
+    };
+
+    host.__setProblems = (items) => {
+      updateIssueBadges(items);
+      renderProblems(items);
+    };
+
+    pill.addEventListener('click', () => togglePanel());
+    shadow.querySelector('.close').addEventListener('click', () => togglePanel(false));
+
+    shadow.querySelectorAll('[data-theme]').forEach((button) => {
+      button.addEventListener('click', () => setTheme(button.dataset.theme));
+    });
+
+    shadow.querySelectorAll('[data-step]').forEach((button) => {
+      button.addEventListener('click', () => stepFontSize(Number(button.dataset.step)));
+    });
+
+    completionsInput.addEventListener('change', () => setCompletions(completionsInput.checked));
+    smoothInput.addEventListener('change', () => setSmooth(smoothInput.checked));
+    diagnosticsInput.addEventListener('change', () => setDiagnostics(diagnosticsInput.checked));
+    shadow.querySelector('#format').addEventListener('click', () => formatDocument());
+
+    shadow.querySelector('.reset').addEventListener('click', resetAll);
+
+    host.__updateLanguage = (next) => {
+      language = next;
+      langLabel.textContent = SUGGESTIONS[language]?.label || '';
+      snippetList.replaceChildren(
+        ...(SNIPPETS[language] || []).map(({ label, body, detail }) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'snippet';
+          button.textContent = label;
+          button.title = detail || label;
+          button.addEventListener('click', () => insertSnippet(body));
+          return button;
+        }),
+      );
+    };
+    host.__syncControls = () => {
+      sizeOutput.textContent = String(state.fontSize);
+      completionsInput.checked = state.completions;
+      smoothInput.checked = state.smooth;
+      diagnosticsInput.checked = state.diagnostics;
+      shadow.querySelectorAll('[data-theme]').forEach((button) => {
+        button.classList.toggle('on', button.dataset.theme === state.theme);
+      });
+      updateIssueBadges(diagnostics);
+      renderProblems(diagnostics);
+    };
+
+    document.documentElement.append(host);
+  }
+
+  function syncControls() {
+    host?.__syncControls?.();
+  }
+
+  function setTheme(theme) {
+    state.theme = theme;
+    saveSettings();
+    syncControls();
+    applySettings(true);
+  }
+
+  function setFontSize(size) {
+    state.fontSize = Math.min(24, Math.max(12, size));
+    saveSettings();
+    syncControls();
+    applySettings(true);
+  }
+
+  function stepFontSize(delta) {
+    setFontSize(state.fontSize + delta);
+  }
+
+  function setCompletions(enabled) {
+    state.completions = enabled;
+    if (!enabled) hideCompletion();
+    saveSettings();
+    syncControls();
+  }
+
+  function setSmooth(enabled) {
+    state.smooth = enabled;
+    saveSettings();
+    syncControls();
+    applySettings(true);
+  }
+
+  function setDiagnostics(enabled) {
+    state.diagnostics = enabled;
+    saveSettings();
+    syncControls();
+    if (!enabled) {
+      diagnostics = [];
+      publishDiagnostics();
       return;
     }
-    const rows = items.map((item) => {
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = 'problem';
-      row.title = item.message;
-      const severity = document.createElement('span');
-      severity.className = `sev ${item.severity}`;
-      severity.textContent = item.severity === 'error' ? '✕' : '⚠';
-      const message = document.createElement('span');
-      message.className = 'msg';
-      message.textContent = item.message;
-      const line = document.createElement('span');
-      line.className = 'ln';
-      line.textContent = String(view ? view.state.doc.lineAt(Math.min(item.from, view.state.doc.length)).number : '');
-      row.append(severity, message, line);
-      row.addEventListener('click', () => revealDiagnostic(item));
-      return row;
-    });
-    problemList.replaceChildren(...rows);
-  };
-
-  host.__setProblems = (items) => {
-    updateIssueBadges(items);
-    renderProblems(items);
-  };
-
-  pill.addEventListener('click', () => togglePanel());
-  shadow.querySelector('.close').addEventListener('click', () => togglePanel(false));
-
-  shadow.querySelectorAll('[data-theme]').forEach((button) => {
-    button.addEventListener('click', () => setTheme(button.dataset.theme));
-  });
-
-  shadow.querySelectorAll('[data-step]').forEach((button) => {
-    button.addEventListener('click', () => stepFontSize(Number(button.dataset.step)));
-  });
-
-  completionsInput.addEventListener('change', () => setCompletions(completionsInput.checked));
-  smoothInput.addEventListener('change', () => setSmooth(smoothInput.checked));
-  diagnosticsInput.addEventListener('change', () => setDiagnostics(diagnosticsInput.checked));
-
-  shadow.querySelector('.reset').addEventListener('click', resetAll);
-
-  host.__updateLanguage = (next) => {
-    language = next;
-    langLabel.textContent = SUGGESTIONS[language]?.label || '';
-    snippetList.replaceChildren(...(SNIPPETS[language] || []).map(({ label, body, detail }) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'snippet';
-      button.textContent = label;
-      button.title = detail || label;
-      button.addEventListener('click', () => insertSnippet(body));
-      return button;
-    }));
-  };
-  host.__syncControls = () => {
-    sizeOutput.textContent = String(state.fontSize);
-    completionsInput.checked = state.completions;
-    smoothInput.checked = state.smooth;
-    diagnosticsInput.checked = state.diagnostics;
-    shadow.querySelectorAll('[data-theme]').forEach((button) => {
-      button.classList.toggle('on', button.dataset.theme === state.theme);
-    });
-    updateIssueBadges(diagnostics);
-    renderProblems(diagnostics);
-  };
-
-  document.documentElement.append(host);
-}
-
-function syncControls() {
-  host?.__syncControls?.();
-}
-
-function setTheme(theme) {
-  state.theme = theme;
-  saveSettings();
-  syncControls();
-  applySettings(true);
-}
-
-function setFontSize(size) {
-  state.fontSize = Math.min(24, Math.max(12, size));
-  saveSettings();
-  syncControls();
-  applySettings(true);
-}
-
-function stepFontSize(delta) {
-  setFontSize(state.fontSize + delta);
-}
-
-function setCompletions(enabled) {
-  state.completions = enabled;
-  if (!enabled) hideCompletion();
-  saveSettings();
-  syncControls();
-}
-
-function setSmooth(enabled) {
-  state.smooth = enabled;
-  saveSettings();
-  syncControls();
-  applySettings(true);
-}
-
-function setDiagnostics(enabled) {
-  state.diagnostics = enabled;
-  saveSettings();
-  syncControls();
-  if (!enabled) {
-    diagnostics = [];
-    publishDiagnostics();
-    return;
+    scheduleDiagnostics(0);
   }
-  scheduleDiagnostics(0);
-}
 
-function resetAll() {
-  state.theme = 'default';
-  state.fontSize = 15;
-  state.completions = true;
-  state.smooth = true;
-  state.diagnostics = true;
-  saveSettings();
-  syncControls();
-  applySettings(true);
-  hideCompletion();
-  endSnippet();
-  scheduleDiagnostics(0);
-}
+  function showToast(message, tone = 'info') {
+    if (!toastHost) {
+      toastHost = document.createElement('div');
+      toastHost.id = 'edabit-ide-toast';
+      toastHost.hidden = true;
+      const shadow = toastHost.attachShadow({ mode: 'open' });
+      shadow.innerHTML = `
+      <style>
+        :host { all: initial; position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 2147483647; pointer-events: none; }
+        :host([hidden]) { display: none !important; }
+        .toast { max-width: min(460px, 88vw); border: 1px solid #3d4a5f; border-radius: 9px; background: #1b2230; color: #dbe4f0; box-shadow: 0 12px 34px rgba(0,0,0,.42); font: 12px/1.45 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 8px 12px; animation: edx-toast-in 130ms ease-out; }
+        .toast.error { border-color: #7a3030; background: #2a1a1d; color: #ffc4c4; }
+        .toast.success { border-color: #2f6b3c; background: #17251b; color: #c7f5cf; }
+        @keyframes edx-toast-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+      </style>
+      <div class="toast" role="status"></div>`;
+      document.documentElement.append(toastHost);
+    }
+    const toast = toastHost.shadowRoot.querySelector('.toast');
+    toast.textContent = message;
+    toast.className = `toast ${tone}`;
+    toastHost.hidden = false;
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toastHost.hidden = true;
+    }, 2600);
+  }
 
-function togglePanel(force) {
-  state.open = typeof force === 'boolean' ? force : !state.open;
-  if (!panel) return;
-  panel.hidden = !state.open;
-  if (state.open) syncControls();
-}
+  let formatting = false;
 
-function createCompletionHost() {
-  completionHost = document.createElement('div');
-  completionHost.id = COMPLETION_ID;
-  completionHost.hidden = true;
-  const shadow = completionHost.attachShadow({ mode: 'open' });
-  shadow.innerHTML = `
+  async function formatDocument() {
+    if (!view || formatting) return;
+    if (language !== 'javascript') {
+      showToast('Prettier formatting is available for JavaScript only.', 'error');
+      return;
+    }
+    const source = view.state.doc.toString();
+    if (!source.trim()) {
+      showToast('Nothing to format.');
+      return;
+    }
+    formatting = true;
+    try {
+      const formatted = await prettier.format(source, {
+        parser: 'babel',
+        plugins: [prettierBabel, prettierEstree],
+        printWidth: 100,
+        tabWidth: 2,
+        semi: true,
+        singleQuote: true,
+        trailingComma: 'all',
+      });
+      if (!view || view.state.doc.toString() !== source) {
+        showToast('Document changed while formatting. Try again.', 'error');
+        return;
+      }
+      if (formatted === source) {
+        showToast('Already formatted.');
+        view.focus();
+        return;
+      }
+      const head = view.state.selection.main.head;
+      const line = view.state.doc.lineAt(head);
+      const lineNumber = line.number;
+      const column = head - line.from;
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: formatted },
+      });
+      const nextDoc = view.state.doc;
+      const targetLine = nextDoc.line(Math.min(lineNumber, nextDoc.lines));
+      const anchor = Math.min(targetLine.from + Math.min(column, targetLine.length), nextDoc.length);
+      view.dispatch({ selection: { anchor }, scrollIntoView: true });
+      view.focus();
+      hideCompletion();
+      endSnippet();
+      scheduleDiagnostics();
+      showToast('Formatted with Prettier.', 'success');
+    } catch (error) {
+      const detail = String(error?.message || error).split('\n')[0];
+      showToast(`Could not format: ${detail}`, 'error');
+    } finally {
+      formatting = false;
+    }
+  }
+
+  function resetAll() {
+    state.theme = 'default';
+    state.fontSize = 15;
+    state.completions = true;
+    state.smooth = true;
+    state.diagnostics = true;
+    saveSettings();
+    syncControls();
+    applySettings(true);
+    hideCompletion();
+    endSnippet();
+    scheduleDiagnostics(0);
+  }
+
+  function togglePanel(force) {
+    state.open = typeof force === 'boolean' ? force : !state.open;
+    if (!panel) return;
+    panel.hidden = !state.open;
+    if (state.open) syncControls();
+  }
+
+  function createCompletionHost() {
+    completionHost = document.createElement('div');
+    completionHost.id = COMPLETION_ID;
+    completionHost.hidden = true;
+    const shadow = completionHost.attachShadow({ mode: 'open' });
+    shadow.innerHTML = `
     <style>
       :host { all: initial; position: fixed; z-index: 2147483647; }
       :host([hidden]) { display: none !important; }
@@ -1181,500 +1389,616 @@ function createCompletionHost() {
       <div class="docs" hidden><div class="docs-title"></div><div class="docs-body"></div></div>
       <div class="foot"><span><b>↑↓</b> navigate</span><span><b>⇥</b> accept</span><span><b>esc</b> dismiss</span></div>
     </div>`;
-  const shadowList = shadow.querySelector('.list');
-  completionList = shadow.querySelector('.rows');
-  completionDocs = shadow.querySelector('.docs');
-  shadowList.addEventListener('mousemove', (event) => {
-    const item = event.target.closest('.item');
-    if (!item) return;
-    const index = Number(item.dataset.index);
-    if (index !== completionIndex) setCompletionIndex(index, false);
-  });
-  shadowList.addEventListener('mousedown', (event) => {
-    const item = event.target.closest('.item');
-    if (!item) return;
-    event.preventDefault();
-    completionIndex = Number(item.dataset.index);
-    acceptCompletion();
-  });
-  document.documentElement.append(completionHost);
-}
+    const shadowList = shadow.querySelector('.list');
+    completionList = shadow.querySelector('.rows');
+    completionDocs = shadow.querySelector('.docs');
+    shadowList.addEventListener('mousemove', (event) => {
+      const item = event.target.closest('.item');
+      if (!item) return;
+      const index = Number(item.dataset.index);
+      if (index !== completionIndex) setCompletionIndex(index, false);
+    });
+    shadowList.addEventListener('mousedown', (event) => {
+      const item = event.target.closest('.item');
+      if (!item) return;
+      event.preventDefault();
+      completionIndex = Number(item.dataset.index);
+      acceptCompletion();
+    });
+    document.documentElement.append(completionHost);
+  }
 
-function createGhostHost() {
-  ghostHost = document.createElement('div');
-  ghostHost.id = GHOST_ID;
-  ghostHost.hidden = true;
-  const shadow = ghostHost.attachShadow({ mode: 'open' });
-  shadow.innerHTML = `
+  function createGhostHost() {
+    ghostHost = document.createElement('div');
+    ghostHost.id = GHOST_ID;
+    ghostHost.hidden = true;
+    const shadow = ghostHost.attachShadow({ mode: 'open' });
+    shadow.innerHTML = `
     <style>
       :host { all: initial; position: fixed; z-index: 2147483646; pointer-events: none; }
       :host([hidden]) { display: none !important; }
       .ghost { color: rgba(148, 163, 184, .72); white-space: pre; }
     </style>
     <span class="ghost"></span>`;
-  ghostText = shadow.querySelector('.ghost');
-  document.documentElement.append(ghostHost);
-}
-
-function hideGhost() {
-  if (ghostHost) ghostHost.hidden = true;
-  if (ghostText) ghostText.textContent = '';
-}
-
-function positionGhost() {
-  if (!view || !ghostHost || ghostHost.hidden) return;
-  const coords = view.coordsAtPos(view.state.selection.main.head);
-  if (!coords) {
-    hideGhost();
-    return;
+    ghostText = shadow.querySelector('.ghost');
+    document.documentElement.append(ghostHost);
   }
-  const style = getComputedStyle(editorContent || view.contentDOM);
-  ghostHost.style.left = `${coords.left}px`;
-  ghostHost.style.top = `${coords.top}px`;
-  ghostHost.style.fontFamily = style.fontFamily;
-  ghostHost.style.fontSize = style.fontSize;
-  ghostHost.style.lineHeight = `${coords.bottom - coords.top}px`;
-  ghostHost.style.letterSpacing = style.letterSpacing;
-}
 
-function showGhost(text) {
-  if (!text) {
-    hideGhost();
-    return;
+  function hideGhost() {
+    if (ghostHost) ghostHost.hidden = true;
+    if (ghostText) ghostText.textContent = '';
   }
-  if (!ghostHost) createGhostHost();
-  ghostText.textContent = text;
-  ghostHost.hidden = false;
-  positionGhost();
-}
 
-function fuzzyScore(query, label) {
-  if (!query) return 1;
-  const q = query.toLowerCase();
-  const l = label.toLowerCase();
-  if (l === q) return 2000;
-  const index = l.indexOf(q);
-  if (index === 0) return 1000 - label.length;
-  if (index > 0) return 600 - index * 2 - label.length * 0.1;
-  const firstIndex = l.indexOf(q[0]);
-  if (firstIndex > 0) {
-    const previous = l[firstIndex - 1];
-    const camelBoundary = label[firstIndex] !== label[firstIndex].toLowerCase();
-    if (!/[.\s_$-]/.test(previous) && !camelBoundary) return -1;
+  function positionGhost() {
+    if (!view || !ghostHost || ghostHost.hidden) return;
+    const coords = view.coordsAtPos(view.state.selection.main.head);
+    if (!coords) {
+      hideGhost();
+      return;
+    }
+    const style = getComputedStyle(editorContent || view.contentDOM);
+    ghostHost.style.left = `${coords.left}px`;
+    ghostHost.style.top = `${coords.top}px`;
+    ghostHost.style.fontFamily = style.fontFamily;
+    ghostHost.style.fontSize = style.fontSize;
+    ghostHost.style.lineHeight = `${coords.bottom - coords.top}px`;
+    ghostHost.style.letterSpacing = style.letterSpacing;
   }
-  let score = 0;
-  let pos = 0;
-  let streak = 0;
-  for (const ch of q) {
-    const found = l.indexOf(ch, pos);
-    if (found === -1) return -1;
-    streak = found === pos ? streak + 1 : 0;
-    score += 12 + streak * 6 - found * 0.4;
-    pos = found + 1;
+
+  function showGhost(text) {
+    if (!text) {
+      hideGhost();
+      return;
+    }
+    if (!ghostHost) createGhostHost();
+    ghostText.textContent = text;
+    ghostHost.hidden = false;
+    positionGhost();
   }
-  return score - label.length * 0.1;
-}
 
-const DOCUMENT_STOPWORDS = new Set(['the', 'and', 'for', 'not', 'you', 'with', 'this', 'that', 'from', 'are', 'was', 'but', 'have', 'has', 'can', 'will', 'your', 'into', 'out', 'all', 'any', 'use', 'its', 'our', 'their', 'then', 'than', 'when', 'what', 'how', 'why', 'who', 'which', 'while', 'else', 'each', 'some', 'such', 'only', 'also', 'more', 'most', 'very', 'just', 'like', 'make', 'made', 'over', 'under', 'after', 'before']);
+  function fuzzyScore(query, label) {
+    if (!query) return 1;
+    const q = query.toLowerCase();
+    const l = label.toLowerCase();
+    if (l === q) return 2000;
+    const index = l.indexOf(q);
+    if (index === 0) return 1000 - label.length;
+    if (index > 0) return 600 - index * 2 - label.length * 0.1;
+    const firstIndex = l.indexOf(q[0]);
+    if (firstIndex > 0) {
+      const previous = l[firstIndex - 1];
+      const camelBoundary = label[firstIndex] !== label[firstIndex].toLowerCase();
+      if (!/[.\s_$-]/.test(previous) && !camelBoundary) return -1;
+    }
+    let score = 0;
+    let pos = 0;
+    let streak = 0;
+    for (const ch of q) {
+      const found = l.indexOf(ch, pos);
+      if (found === -1) return -1;
+      streak = found === pos ? streak + 1 : 0;
+      score += 12 + streak * 6 - found * 0.4;
+      pos = found + 1;
+    }
+    return score - label.length * 0.1;
+  }
 
-function documentWords(prefix) {
-  if (!view) return [];
-  const known = new Set([
-    ...(SUGGESTIONS[language]?.items || []).map((entry) => entry.label),
-    ...(SNIPPETS[language] || []).map((snippet) => snippet.label),
+  const DOCUMENT_STOPWORDS = new Set([
+    'the',
+    'and',
+    'for',
+    'not',
+    'you',
+    'with',
+    'this',
+    'that',
+    'from',
+    'are',
+    'was',
+    'but',
+    'have',
+    'has',
+    'can',
+    'will',
+    'your',
+    'into',
+    'out',
+    'all',
+    'any',
+    'use',
+    'its',
+    'our',
+    'their',
+    'then',
+    'than',
+    'when',
+    'what',
+    'how',
+    'why',
+    'who',
+    'which',
+    'while',
+    'else',
+    'each',
+    'some',
+    'such',
+    'only',
+    'also',
+    'more',
+    'most',
+    'very',
+    'just',
+    'like',
+    'make',
+    'made',
+    'over',
+    'under',
+    'after',
+    'before',
   ]);
-  const query = prefix.toLowerCase();
-  const seen = new Set();
-  const words = [];
-  for (const match of view.state.doc.toString().matchAll(/[A-Za-z_$][A-Za-z0-9_$]{2,}/g)) {
-    const word = match[0];
-    const lower = word.toLowerCase();
-    if (lower === query || known.has(word) || seen.has(word) || DOCUMENT_STOPWORDS.has(lower)) continue;
-    seen.add(word);
-    words.push({ label: word, kind: 'variable', detail: 'this file', doc: 'Word from this challenge.' });
-    if (words.length >= 40) break;
-  }
-  return words;
-}
 
-const snippetItemCache = new Map();
-
-function snippetCompletionItems() {
-  if (snippetItemCache.has(language)) return snippetItemCache.get(language);
-  const items = (SNIPPETS[language] || []).map(({ label, body, detail }) => ({
-    label,
-    kind: 'snippet',
-    detail: detail || 'snippet',
-    doc: 'Inserts a code template. Tab moves between placeholders.',
-    insert: body,
-  }));
-  snippetItemCache.set(language, items);
-  return items;
-}
-
-const STRING_METHODS = new Set([
-  'charAt', 'charCodeAt', 'at', 'includes', 'endsWith', 'indexOf', 'lastIndexOf',
-  'padEnd', 'padStart', 'repeat', 'replace', 'replaceAll', 'slice', 'split',
-  'startsWith', 'substring', 'toLowerCase', 'toUpperCase', 'trim', 'trimEnd',
-  'trimStart', 'match', 'matchAll', 'search',
-]);
-
-const ARRAY_METHODS = new Set([
-  'at', 'concat', 'copyWithin', 'entries', 'every', 'fill', 'filter', 'find',
-  'findIndex', 'findLast', 'findLastIndex', 'flat', 'flatMap', 'forEach',
-  'includes', 'indexOf', 'join', 'keys', 'lastIndexOf', 'map', 'pop', 'push',
-  'reduce', 'reduceRight', 'reverse', 'shift', 'slice', 'some', 'sort',
-  'splice', 'unshift', 'values',
-]);
-
-const ARRAY_NAMES = /^(arr|array|arrays|nums|numbers|list|items|values|elements|data|result|results|words|chars|letters|rows|entries)$/i;
-
-function receiverOf(text) {
-  const trimmed = text.replace(/\s+$/, '');
-  if (/(?:'[^']*'|"[^"]*"|`[^`]*`)$/.test(trimmed)) return 'string';
-  if (/\]$/.test(trimmed)) return 'array';
-  if (/\}$/.test(trimmed)) return 'object';
-  const name = trimmed.match(/([A-Za-z_$][A-Za-z0-9_$]*)$/);
-  if (!name) return 'unknown';
-  if (ARRAY_NAMES.test(name[1])) return 'array';
-  return 'unknown';
-}
-
-function rankItems(prefix, member, receiver = 'unknown') {
-  const all = [...snippetCompletionItems(), ...(SUGGESTIONS[language]?.items || []), ...documentWords(prefix)];
-  const memberKinds = new Set(['method', 'property', 'function', 'class']);
-  const pool = member ? all.filter((entry) => memberKinds.has(entry.kind)) : all;
-  const scored = [];
-  for (const entry of pool) {
-    let score = fuzzyScore(prefix, entry.label);
-    if (score < 0) continue;
-    if (member) {
-      if (entry.kind === 'method') score += 260;
-      const tail = entry.label.slice(entry.label.lastIndexOf('.') + 1);
-      if (prefix && tail.toLowerCase().startsWith(prefix.toLowerCase())) score += 900;
-      if (receiver === 'string' && STRING_METHODS.has(tail)) score += 220;
-      if (receiver === 'array' && ARRAY_METHODS.has(tail)) score += 220;
+  function documentWords(prefix) {
+    if (!view) return [];
+    const known = new Set([
+      ...(SUGGESTIONS[language]?.items || []).map((entry) => entry.label),
+      ...(SNIPPETS[language] || []).map((snippet) => snippet.label),
+    ]);
+    const query = prefix.toLowerCase();
+    const seen = new Set();
+    const words = [];
+    for (const match of view.state.doc.toString().matchAll(/[A-Za-z_$][A-Za-z0-9_$]{2,}/g)) {
+      const word = match[0];
+      const lower = word.toLowerCase();
+      if (lower === query || known.has(word) || seen.has(word) || DOCUMENT_STOPWORDS.has(lower)) continue;
+      seen.add(word);
+      words.push({ label: word, kind: 'variable', detail: 'this file', doc: 'Word from this challenge.' });
+      if (words.length >= 40) break;
     }
-    scored.push({ entry, score });
+    return words;
   }
-  scored.sort((a, b) => b.score - a.score
-    || (KIND_RANK[a.entry.kind] ?? 9) - (KIND_RANK[b.entry.kind] ?? 9)
-    || a.entry.label.length - b.entry.label.length);
-  return scored.slice(0, 10).map((row) => row.entry);
-}
 
-function completionContext() {
-  if (!view) return null;
-  const selection = view.state.selection.main;
-  if (!selection.empty) return null;
-  const head = selection.head;
-  const line = view.state.doc.lineAt(head);
-  const before = view.state.doc.sliceString(line.from, head);
-  const match = before.match(/[A-Za-z_$][A-Za-z0-9_$?!]*$/);
-  const prefix = match ? match[0] : '';
-  const member = !prefix && /\.\s*$/.test(before) || (!!prefix && /\.[A-Za-z_$][A-Za-z0-9_$?!]*$/.test(before));
-  const target = member ? before.slice(0, before.length - prefix.length).replace(/\.\s*$/, '') : '';
-  const receiver = member ? receiverOf(target) : 'unknown';
-  return { head, prefix, member, receiver };
-}
+  const snippetItemCache = new Map();
 
-function updateCompletion(force = false) {
-  if (!state.completions || !view || (snippetSession && !force)) {
-    hideCompletion();
-    return;
+  function snippetCompletionItems() {
+    if (snippetItemCache.has(language)) return snippetItemCache.get(language);
+    const items = (SNIPPETS[language] || []).map(({ label, body, detail }) => ({
+      label,
+      kind: 'snippet',
+      detail: detail || 'snippet',
+      doc: 'Inserts a code template. Tab moves between placeholders.',
+      insert: body,
+    }));
+    snippetItemCache.set(language, items);
+    return items;
   }
-  const context = completionContext();
-  if (!context) {
-    hideCompletion();
-    return;
-  }
-  const { prefix, member, receiver } = context;
-  if (!force && !member && prefix.length < 2) {
-    hideCompletion();
-    return;
-  }
-  const items = rankItems(prefix, member, receiver);
-  if (!items.length) {
-    hideCompletion();
-    return;
-  }
-  showCompletion(prefix, items);
-}
 
-function updateGhost(prefix, entry) {
-  if (!prefix || !entry || entry.kind === 'snippet') {
-    hideGhost();
-    return;
-  }
-  const lower = entry.label.toLowerCase();
-  const query = prefix.toLowerCase();
-  if (lower.startsWith(query) && entry.label.length > prefix.length) {
-    showGhost(entry.label.slice(prefix.length));
-  } else {
-    hideGhost();
-  }
-}
+  const STRING_METHODS = new Set([
+    'charAt',
+    'charCodeAt',
+    'at',
+    'includes',
+    'endsWith',
+    'indexOf',
+    'lastIndexOf',
+    'padEnd',
+    'padStart',
+    'repeat',
+    'replace',
+    'replaceAll',
+    'slice',
+    'split',
+    'startsWith',
+    'substring',
+    'toLowerCase',
+    'toUpperCase',
+    'trim',
+    'trimEnd',
+    'trimStart',
+    'match',
+    'matchAll',
+    'search',
+  ]);
 
-function showCompletion(prefix, items) {
-  if (!completionHost) createCompletionHost();
-  completionItems = items;
-  completionPrefix = prefix;
-  completionIndex = 0;
-  completionHost.hidden = false;
-  renderCompletion();
-  positionCompletion();
-  updateGhost(prefix, items[0]);
-}
+  const ARRAY_METHODS = new Set([
+    'at',
+    'concat',
+    'copyWithin',
+    'entries',
+    'every',
+    'fill',
+    'filter',
+    'find',
+    'findIndex',
+    'findLast',
+    'findLastIndex',
+    'flat',
+    'flatMap',
+    'forEach',
+    'includes',
+    'indexOf',
+    'join',
+    'keys',
+    'lastIndexOf',
+    'map',
+    'pop',
+    'push',
+    'reduce',
+    'reduceRight',
+    'reverse',
+    'shift',
+    'slice',
+    'some',
+    'sort',
+    'splice',
+    'unshift',
+    'values',
+  ]);
 
-function appendHighlighted(container, label, query) {
-  if (!query) {
-    container.textContent = label;
-    return;
+  const ARRAY_NAMES =
+    /^(arr|array|arrays|nums|numbers|list|items|values|elements|data|result|results|words|chars|letters|rows|entries)$/i;
+
+  function receiverOf(text) {
+    const trimmed = text.replace(/\s+$/, '');
+    if (/(?:'[^']*'|"[^"]*"|`[^`]*`)$/.test(trimmed)) return 'string';
+    if (/\]$/.test(trimmed)) return 'array';
+    if (/\}$/.test(trimmed)) return 'object';
+    const name = trimmed.match(/([A-Za-z_$][A-Za-z0-9_$]*)$/);
+    if (!name) return 'unknown';
+    if (ARRAY_NAMES.test(name[1])) return 'array';
+    return 'unknown';
   }
-  const lowerLabel = label.toLowerCase();
-  const lowerQuery = query.toLowerCase();
-  const indices = [];
-  let pos = 0;
-  for (const ch of lowerQuery) {
-    const found = lowerLabel.indexOf(ch, pos);
-    if (found === -1) break;
-    indices.push(found);
-    pos = found + 1;
-  }
-  if (!indices.length) {
-    container.textContent = label;
-    return;
-  }
-  const hits = new Set(indices);
-  let buffer = '';
-  for (let i = 0; i < label.length; i += 1) {
-    if (hits.has(i)) {
-      if (buffer) {
-        container.append(document.createTextNode(buffer));
-        buffer = '';
+
+  function rankItems(prefix, member, receiver = 'unknown') {
+    const all = [...snippetCompletionItems(), ...(SUGGESTIONS[language]?.items || []), ...documentWords(prefix)];
+    const memberKinds = new Set(['method', 'property', 'function', 'class']);
+    const pool = member ? all.filter((entry) => memberKinds.has(entry.kind)) : all;
+    const scored = [];
+    for (const entry of pool) {
+      let score = fuzzyScore(prefix, entry.label);
+      if (score < 0) continue;
+      if (member) {
+        if (entry.kind === 'method') score += 260;
+        const tail = entry.label.slice(entry.label.lastIndexOf('.') + 1);
+        if (prefix && tail.toLowerCase().startsWith(prefix.toLowerCase())) score += 900;
+        if (receiver === 'string' && STRING_METHODS.has(tail)) score += 220;
+        if (receiver === 'array' && ARRAY_METHODS.has(tail)) score += 220;
       }
-      const span = document.createElement('span');
-      span.className = 'hit';
-      span.textContent = label[i];
-      container.append(span);
+      scored.push({ entry, score });
+    }
+    scored.sort(
+      (a, b) =>
+        b.score - a.score ||
+        (KIND_RANK[a.entry.kind] ?? 9) - (KIND_RANK[b.entry.kind] ?? 9) ||
+        a.entry.label.length - b.entry.label.length,
+    );
+    return scored.slice(0, 10).map((row) => row.entry);
+  }
+
+  function completionContext() {
+    if (!view) return null;
+    const selection = view.state.selection.main;
+    if (!selection.empty) return null;
+    const head = selection.head;
+    const line = view.state.doc.lineAt(head);
+    const before = view.state.doc.sliceString(line.from, head);
+    const match = before.match(/[A-Za-z_$][A-Za-z0-9_$?!]*$/);
+    const prefix = match ? match[0] : '';
+    const member = (!prefix && /\.\s*$/.test(before)) || (!!prefix && /\.[A-Za-z_$][A-Za-z0-9_$?!]*$/.test(before));
+    const target = member ? before.slice(0, before.length - prefix.length).replace(/\.\s*$/, '') : '';
+    const receiver = member ? receiverOf(target) : 'unknown';
+    return { head, prefix, member, receiver };
+  }
+
+  function updateCompletion(force = false) {
+    if (!state.completions || !view || (snippetSession && !force)) {
+      hideCompletion();
+      return;
+    }
+    const context = completionContext();
+    if (!context) {
+      hideCompletion();
+      return;
+    }
+    const { prefix, member, receiver } = context;
+    if (!force && !member && prefix.length < 2) {
+      hideCompletion();
+      return;
+    }
+    const items = rankItems(prefix, member, receiver);
+    if (!items.length) {
+      hideCompletion();
+      return;
+    }
+    showCompletion(prefix, items);
+  }
+
+  function updateGhost(prefix, entry) {
+    if (!prefix || !entry || entry.kind === 'snippet') {
+      hideGhost();
+      return;
+    }
+    const lower = entry.label.toLowerCase();
+    const query = prefix.toLowerCase();
+    if (lower.startsWith(query) && entry.label.length > prefix.length) {
+      showGhost(entry.label.slice(prefix.length));
     } else {
-      buffer += label[i];
+      hideGhost();
     }
   }
-  if (buffer) container.append(document.createTextNode(buffer));
-}
 
-function renderCompletion() {
-  const rows = completionItems.map((entry, index) => {
-    const row = document.createElement('div');
-    row.className = 'item';
-    row.dataset.index = String(index);
-    row.dataset.active = String(index === completionIndex);
-    row.setAttribute('role', 'option');
-    row.setAttribute('aria-selected', String(index === completionIndex));
-
-    const badge = document.createElement('span');
-    badge.className = `kind kind-${entry.kind}`;
-    badge.textContent = KIND_BADGE[entry.kind] || '•';
-    badge.title = entry.kind;
-
-    const label = document.createElement('span');
-    label.className = 'label';
-    appendHighlighted(label, entry.label, completionPrefix);
-
-    const detail = document.createElement('span');
-    detail.className = 'detail';
-    detail.textContent = entry.detail || '';
-
-    row.append(badge, label, detail);
-    return row;
-  });
-  completionList.replaceChildren(...rows);
-  renderDocs();
-  completionList.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
-}
-
-function renderDocs() {
-  const entry = completionItems[completionIndex];
-  if (!entry || (!entry.detail && !entry.doc)) {
-    completionDocs.hidden = true;
-    return;
+  function showCompletion(prefix, items) {
+    if (!completionHost) createCompletionHost();
+    completionItems = items;
+    completionPrefix = prefix;
+    completionIndex = 0;
+    completionHost.hidden = false;
+    renderCompletion();
+    positionCompletion();
+    updateGhost(prefix, items[0]);
   }
-  completionDocs.hidden = false;
-  completionDocs.querySelector('.docs-title').textContent = entry.detail || entry.label;
-  const body = completionDocs.querySelector('.docs-body');
-  body.textContent = entry.doc || '';
-  body.hidden = !entry.doc;
-}
 
-function setCompletionIndex(index, scroll = true) {
-  if (!completionItems.length) return;
-  completionIndex = (index + completionItems.length) % completionItems.length;
-  completionList.querySelectorAll('.item').forEach((row, i) => {
-    const active = i === completionIndex;
-    row.dataset.active = String(active);
-    row.setAttribute('aria-selected', String(active));
-  });
-  renderDocs();
-  updateGhost(completionPrefix, completionItems[completionIndex]);
-  if (scroll) completionList.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
-}
+  function appendHighlighted(container, label, query) {
+    if (!query) {
+      container.textContent = label;
+      return;
+    }
+    const lowerLabel = label.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    const indices = [];
+    let pos = 0;
+    for (const ch of lowerQuery) {
+      const found = lowerLabel.indexOf(ch, pos);
+      if (found === -1) break;
+      indices.push(found);
+      pos = found + 1;
+    }
+    if (!indices.length) {
+      container.textContent = label;
+      return;
+    }
+    const hits = new Set(indices);
+    let buffer = '';
+    for (let i = 0; i < label.length; i += 1) {
+      if (hits.has(i)) {
+        if (buffer) {
+          container.append(document.createTextNode(buffer));
+          buffer = '';
+        }
+        const span = document.createElement('span');
+        span.className = 'hit';
+        span.textContent = label[i];
+        container.append(span);
+      } else {
+        buffer += label[i];
+      }
+    }
+    if (buffer) container.append(document.createTextNode(buffer));
+  }
 
-function positionCompletion() {
-  if (!view || !completionHost || completionHost.hidden) return;
-  const coords = view.coordsAtPos(view.state.selection.main.head);
-  if (!coords) return;
-  const rect = completionHost.getBoundingClientRect();
-  const width = rect.width || 340;
-  const height = rect.height || 260;
-  const left = Math.max(8, Math.min(coords.left, window.innerWidth - width - 8));
-  let top = coords.bottom + 6;
-  if (top + height > window.innerHeight - 8) top = Math.max(8, coords.top - height - 6);
-  completionHost.style.left = `${left}px`;
-  completionHost.style.top = `${top}px`;
-}
+  function renderCompletion() {
+    const rows = completionItems.map((entry, index) => {
+      const row = document.createElement('div');
+      row.className = 'item';
+      row.dataset.index = String(index);
+      row.dataset.active = String(index === completionIndex);
+      row.setAttribute('role', 'option');
+      row.setAttribute('aria-selected', String(index === completionIndex));
 
-function hideCompletion() {
-  if (completionHost) completionHost.hidden = true;
-  completionList?.replaceChildren();
-  hideGhost();
-  completionItems = [];
-  completionPrefix = '';
-  completionIndex = 0;
-}
+      const badge = document.createElement('span');
+      badge.className = `kind kind-${entry.kind}`;
+      badge.textContent = KIND_BADGE[entry.kind] || '•';
+      badge.title = entry.kind;
 
-function acceptCompletion() {
-  if (!view || !completionItems.length) return;
-  const entry = completionItems[completionIndex];
-  const selection = view.state.selection.main;
-  const from = selection.head - completionPrefix.length;
-  applySnippet(from, selection.head, entry.insert || entry.label);
-  hideCompletion();
-  view.focus();
-}
+      const label = document.createElement('span');
+      label.className = 'label';
+      appendHighlighted(label, entry.label, completionPrefix);
 
-function repositionOverlays() {
-  if (completionHost && !completionHost.hidden) positionCompletion();
-  if (ghostHost && !ghostHost.hidden) positionGhost();
-  renderDiagnosticOverlay();
-}
+      const detail = document.createElement('span');
+      detail.className = 'detail';
+      detail.textContent = entry.detail || '';
 
-function allCommands() {
-  return [
-    { label: 'Use Edabit theme', detail: 'Appearance', run: () => setTheme('default') },
-    { label: 'Use Midnight theme', detail: 'Appearance', run: () => setTheme('dark') },
-    { label: 'Increase font size', detail: `${state.fontSize}px`, run: () => stepFontSize(1) },
-    { label: 'Decrease font size', detail: `${state.fontSize}px`, run: () => stepFontSize(-1) },
-    { label: 'Reset font size', detail: '15px', run: () => setFontSize(15) },
-    { label: state.completions ? 'Disable word completion' : 'Enable word completion', detail: state.completions ? 'On' : 'Off', run: () => setCompletions(!state.completions) },
-    { label: state.smooth ? 'Disable smooth typing' : 'Enable smooth typing', detail: state.smooth ? 'On' : 'Off', run: () => setSmooth(!state.smooth) },
-    { label: state.diagnostics ? 'Disable error checking' : 'Enable error checking', detail: state.diagnostics ? 'On' : 'Off', run: () => setDiagnostics(!state.diagnostics) },
-    { label: 'Go to next problem', detail: 'F8', run: () => goToProblem(1) },
-    { label: 'Go to previous problem', detail: 'Shift+F8', run: () => goToProblem(-1) },
-    { label: 'Show problems', detail: `${diagnostics.length}`, run: () => togglePanel(true) },
-    { label: 'Go to line…', detail: 'Navigation', run: () => startGoto() },
-    { label: 'Show snippets panel', detail: 'Editor', run: () => togglePanel(true) },
-    { label: 'Reset all settings', detail: 'Editor', run: () => resetAll() },
-  ];
-}
+      row.append(badge, label, detail);
+      return row;
+    });
+    completionList.replaceChildren(...rows);
+    renderDocs();
+    completionList.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
+  }
 
-function renderPalette(query) {
-  if (!paletteResults) return;
-  if (paletteMode === 'goto') {
-    paletteCommands = [];
+  function renderDocs() {
+    const entry = completionItems[completionIndex];
+    if (!entry || (!entry.detail && !entry.doc)) {
+      completionDocs.hidden = true;
+      return;
+    }
+    completionDocs.hidden = false;
+    completionDocs.querySelector('.docs-title').textContent = entry.detail || entry.label;
+    const body = completionDocs.querySelector('.docs-body');
+    body.textContent = entry.doc || '';
+    body.hidden = !entry.doc;
+  }
+
+  function setCompletionIndex(index, scroll = true) {
+    if (!completionItems.length) return;
+    completionIndex = (index + completionItems.length) % completionItems.length;
+    completionList.querySelectorAll('.item').forEach((row, i) => {
+      const active = i === completionIndex;
+      row.dataset.active = String(active);
+      row.setAttribute('aria-selected', String(active));
+    });
+    renderDocs();
+    updateGhost(completionPrefix, completionItems[completionIndex]);
+    if (scroll) completionList.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function positionCompletion() {
+    if (!view || !completionHost || completionHost.hidden) return;
+    const coords = view.coordsAtPos(view.state.selection.main.head);
+    if (!coords) return;
+    const rect = completionHost.getBoundingClientRect();
+    const width = rect.width || 340;
+    const height = rect.height || 260;
+    const left = Math.max(8, Math.min(coords.left, window.innerWidth - width - 8));
+    let top = coords.bottom + 6;
+    if (top + height > window.innerHeight - 8) top = Math.max(8, coords.top - height - 6);
+    completionHost.style.left = `${left}px`;
+    completionHost.style.top = `${top}px`;
+  }
+
+  function hideCompletion() {
+    if (completionHost) completionHost.hidden = true;
+    completionList?.replaceChildren();
+    hideGhost();
+    completionItems = [];
+    completionPrefix = '';
+    completionIndex = 0;
+  }
+
+  function acceptCompletion() {
+    if (!view || !completionItems.length) return;
+    const entry = completionItems[completionIndex];
+    const selection = view.state.selection.main;
+    const from = selection.head - completionPrefix.length;
+    applySnippet(from, selection.head, entry.insert || entry.label);
+    hideCompletion();
+    view.focus();
+  }
+
+  function repositionOverlays() {
+    if (completionHost && !completionHost.hidden) positionCompletion();
+    if (ghostHost && !ghostHost.hidden) positionGhost();
+    renderDiagnosticOverlay();
+  }
+
+  function allCommands() {
+    return [
+      { label: 'Use Edabit theme', detail: 'Appearance', run: () => setTheme('default') },
+      { label: 'Use Midnight theme', detail: 'Appearance', run: () => setTheme('dark') },
+      { label: 'Increase font size', detail: `${state.fontSize}px`, run: () => stepFontSize(1) },
+      { label: 'Decrease font size', detail: `${state.fontSize}px`, run: () => stepFontSize(-1) },
+      { label: 'Reset font size', detail: '15px', run: () => setFontSize(15) },
+      {
+        label: state.completions ? 'Disable word completion' : 'Enable word completion',
+        detail: state.completions ? 'On' : 'Off',
+        run: () => setCompletions(!state.completions),
+      },
+      {
+        label: state.smooth ? 'Disable smooth typing' : 'Enable smooth typing',
+        detail: state.smooth ? 'On' : 'Off',
+        run: () => setSmooth(!state.smooth),
+      },
+      {
+        label: state.diagnostics ? 'Disable error checking' : 'Enable error checking',
+        detail: state.diagnostics ? 'On' : 'Off',
+        run: () => setDiagnostics(!state.diagnostics),
+      },
+      { label: 'Go to next problem', detail: 'F8', run: () => goToProblem(1) },
+      { label: 'Go to previous problem', detail: 'Shift+F8', run: () => goToProblem(-1) },
+      { label: 'Show problems', detail: `${diagnostics.length}`, run: () => togglePanel(true) },
+      { label: 'Format document with Prettier', detail: 'Shift+Alt+F', run: () => formatDocument() },
+      { label: 'Go to line…', detail: 'Navigation', run: () => startGoto() },
+      { label: 'Show snippets panel', detail: 'Editor', run: () => togglePanel(true) },
+      { label: 'Reset all settings', detail: 'Editor', run: () => resetAll() },
+    ];
+  }
+
+  function renderPalette(query) {
+    if (!paletteResults) return;
+    if (paletteMode === 'goto') {
+      paletteCommands = [];
+      paletteIndex = 0;
+      const hint = document.createElement('div');
+      hint.className = 'empty';
+      hint.textContent = 'Type a line number and press Enter.';
+      paletteResults.replaceChildren(hint);
+      return;
+    }
+    const normalized = query.trim();
+    const commands = allCommands();
+    let entries;
+    if (!normalized) {
+      entries = commands.map((command) => ({ command, score: 1 }));
+    } else {
+      entries = [];
+      for (const command of commands) {
+        const labelScore = fuzzyScore(normalized, command.label);
+        const detailScore = fuzzyScore(normalized, command.detail || '');
+        const score = Math.max(labelScore, detailScore >= 0 ? detailScore * 0.35 : -1);
+        if (score >= 0) entries.push({ command, score });
+      }
+      entries.sort((a, b) => b.score - a.score);
+    }
+    paletteCommands = entries.map((entry) => entry.command);
+    if (paletteIndex >= paletteCommands.length) paletteIndex = Math.max(0, paletteCommands.length - 1);
+    if (!paletteCommands.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'No matching commands';
+      paletteResults.replaceChildren(empty);
+      return;
+    }
+    const rows = paletteCommands.map((command, index) => {
+      const row = document.createElement('div');
+      row.className = 'item';
+      row.dataset.index = String(index);
+      row.dataset.active = String(index === paletteIndex);
+      row.setAttribute('role', 'option');
+      row.setAttribute('aria-selected', String(index === paletteIndex));
+      const label = document.createElement('span');
+      label.className = 'label';
+      appendHighlighted(label, command.label, normalized);
+      const detail = document.createElement('span');
+      detail.className = 'detail';
+      detail.textContent = command.detail || '';
+      row.append(label, detail);
+      return row;
+    });
+    paletteResults.replaceChildren(...rows);
+    paletteResults.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function setPaletteIndex(index) {
+    if (!paletteCommands.length) return;
+    paletteIndex = (index + paletteCommands.length) % paletteCommands.length;
+    paletteResults.querySelectorAll('.item').forEach((row, i) => {
+      const active = i === paletteIndex;
+      row.dataset.active = String(active);
+      row.setAttribute('aria-selected', String(active));
+    });
+    paletteResults.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function startGoto() {
+    paletteHost.hidden = false;
+    paletteMode = 'goto';
     paletteIndex = 0;
-    const hint = document.createElement('div');
-    hint.className = 'empty';
-    hint.textContent = 'Type a line number and press Enter.';
-    paletteResults.replaceChildren(hint);
-    return;
+    paletteInput.value = '';
+    paletteInput.placeholder = 'Go to line…';
+    renderPalette('');
+    requestAnimationFrame(() => paletteInput.focus());
   }
-  const normalized = query.trim();
-  const commands = allCommands();
-  let entries;
-  if (!normalized) {
-    entries = commands.map((command) => ({ command, score: 1 }));
-  } else {
-    entries = [];
-    for (const command of commands) {
-      const labelScore = fuzzyScore(normalized, command.label);
-      const detailScore = fuzzyScore(normalized, command.detail || '');
-      const score = Math.max(labelScore, detailScore >= 0 ? detailScore * 0.35 : -1);
-      if (score >= 0) entries.push({ command, score });
+
+  function runPaletteSelection() {
+    if (paletteMode === 'goto') {
+      const lineNumber = Number.parseInt(paletteInput.value.trim(), 10);
+      if (view && Number.isFinite(lineNumber)) {
+        const line = view.state.doc.line(Math.min(Math.max(lineNumber, 1), view.state.doc.lines));
+        view.dispatch({ selection: { anchor: line.from } });
+      }
+      togglePalette(false);
+      return;
     }
-    entries.sort((a, b) => b.score - a.score);
-  }
-  paletteCommands = entries.map((entry) => entry.command);
-  if (paletteIndex >= paletteCommands.length) paletteIndex = Math.max(0, paletteCommands.length - 1);
-  if (!paletteCommands.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty';
-    empty.textContent = 'No matching commands';
-    paletteResults.replaceChildren(empty);
-    return;
-  }
-  const rows = paletteCommands.map((command, index) => {
-    const row = document.createElement('div');
-    row.className = 'item';
-    row.dataset.index = String(index);
-    row.dataset.active = String(index === paletteIndex);
-    row.setAttribute('role', 'option');
-    row.setAttribute('aria-selected', String(index === paletteIndex));
-    const label = document.createElement('span');
-    label.className = 'label';
-    appendHighlighted(label, command.label, normalized);
-    const detail = document.createElement('span');
-    detail.className = 'detail';
-    detail.textContent = command.detail || '';
-    row.append(label, detail);
-    return row;
-  });
-  paletteResults.replaceChildren(...rows);
-  paletteResults.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
-}
-
-function setPaletteIndex(index) {
-  if (!paletteCommands.length) return;
-  paletteIndex = (index + paletteCommands.length) % paletteCommands.length;
-  paletteResults.querySelectorAll('.item').forEach((row, i) => {
-    const active = i === paletteIndex;
-    row.dataset.active = String(active);
-    row.setAttribute('aria-selected', String(active));
-  });
-  paletteResults.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
-}
-
-function startGoto() {
-  paletteHost.hidden = false;
-  paletteMode = 'goto';
-  paletteIndex = 0;
-  paletteInput.value = '';
-  paletteInput.placeholder = 'Go to line…';
-  renderPalette('');
-  requestAnimationFrame(() => paletteInput.focus());
-}
-
-function runPaletteSelection() {
-  if (paletteMode === 'goto') {
-    const lineNumber = Number.parseInt(paletteInput.value.trim(), 10);
-    if (view && Number.isFinite(lineNumber)) {
-      const line = view.state.doc.line(Math.min(Math.max(lineNumber, 1), view.state.doc.lines));
-      view.dispatch({ selection: { anchor: line.from } });
-    }
+    const command = paletteCommands[paletteIndex];
     togglePalette(false);
-    return;
+    command?.run();
   }
-  const command = paletteCommands[paletteIndex];
-  togglePalette(false);
-  command?.run();
-}
 
-function createPalette() {
-  paletteHost = document.createElement('div');
-  paletteHost.id = 'edabit-ide-palette';
-  paletteHost.hidden = true;
-  const shadow = paletteHost.attachShadow({ mode: 'open' });
-  shadow.innerHTML = `
+  function createPalette() {
+    paletteHost = document.createElement('div');
+    paletteHost.id = 'edabit-ide-palette';
+    paletteHost.hidden = true;
+    const shadow = paletteHost.attachShadow({ mode: 'open' });
+    shadow.innerHTML = `
     <style>
       :host { all: initial; position: fixed; inset: 0; z-index: 2147483647; }
       :host([hidden]) { display: none !important; }
@@ -1700,260 +2024,303 @@ function createPalette() {
       <div class="results"></div>
       <div class="foot"><span><b>↑↓</b> navigate</span><span><b>↵</b> run</span><span><b>esc</b> close</span></div>
     </div>`;
-  paletteInput = shadow.querySelector('.input');
-  paletteResults = shadow.querySelector('.results');
+    paletteInput = shadow.querySelector('.input');
+    paletteResults = shadow.querySelector('.results');
 
-  paletteInput.addEventListener('input', () => renderPalette(paletteInput.value));
-  paletteInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
+    paletteInput.addEventListener('input', () => renderPalette(paletteInput.value));
+    paletteInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        togglePalette(false);
+        return;
+      }
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        event.stopPropagation();
+        setPaletteIndex(paletteIndex + (event.key === 'ArrowDown' ? 1 : -1));
+        return;
+      }
+      if (event.key === 'PageDown' || event.key === 'PageUp') {
+        event.preventDefault();
+        event.stopPropagation();
+        setPaletteIndex(paletteIndex + (event.key === 'PageDown' ? 5 : -5));
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        event.stopPropagation();
+        runPaletteSelection();
+      }
+    });
+    shadow.querySelector('.backdrop').addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      togglePalette(false);
+    });
+    paletteResults.addEventListener('mousemove', (event) => {
+      const row = event.target.closest('.item');
+      if (!row) return;
+      const index = Number(row.dataset.index);
+      if (index !== paletteIndex) setPaletteIndex(index);
+    });
+    paletteResults.addEventListener('mousedown', (event) => {
+      const row = event.target.closest('.item');
+      if (!row) return;
+      event.preventDefault();
+      paletteIndex = Number(row.dataset.index);
+      runPaletteSelection();
+    });
+    document.documentElement.append(paletteHost);
+  }
+
+  function togglePalette(force) {
+    if (!paletteHost) createPalette();
+    const open = typeof force === 'boolean' ? force : paletteHost.hidden;
+    paletteHost.hidden = !open;
+    if (!open) {
+      view?.focus();
+      return;
+    }
+    hideCompletion();
+    endSnippet();
+    paletteMode = 'command';
+    paletteIndex = 0;
+    paletteInput.value = '';
+    paletteInput.placeholder = 'Type a command…';
+    renderPalette('');
+    requestAnimationFrame(() => paletteInput.focus());
+  }
+
+  function onEditorKeyDown(event) {
+    if (!event.target?.closest?.('.cm-content')) return;
+    if (event.key === 'F8') {
+      if (goToProblem(event.shiftKey ? -1 : 1)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      return;
+    }
+    if (event.code === 'Space' && (event.ctrlKey || event.metaKey) && !event.altKey) {
+      if (!view) return;
       event.preventDefault();
       event.stopPropagation();
-      togglePalette(false);
+      updateCompletion(true);
+      return;
+    }
+    if (event.key === 'Backspace' || event.key === 'Delete') {
+      requestAnimationFrame(() => updateCompletion());
+      return;
+    }
+    const completionOpen = completionHost && !completionHost.hidden && completionItems.length;
+    if (!completionOpen) {
+      if (event.key === 'Tab' && event.shiftKey) {
+        endSnippet();
+        return;
+      }
+      if (event.key === 'Tab' && advanceSnippet()) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (
+        ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', 'Escape'].includes(
+          event.key,
+        )
+      ) {
+        endSnippet();
+      }
       return;
     }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       event.stopPropagation();
-      setPaletteIndex(paletteIndex + (event.key === 'ArrowDown' ? 1 : -1));
+      setCompletionIndex(completionIndex + (event.key === 'ArrowDown' ? 1 : -1));
       return;
     }
     if (event.key === 'PageDown' || event.key === 'PageUp') {
       event.preventDefault();
       event.stopPropagation();
-      setPaletteIndex(paletteIndex + (event.key === 'PageDown' ? 5 : -5));
+      setCompletionIndex(completionIndex + (event.key === 'PageDown' ? 5 : -5));
       return;
     }
-    if (event.key === 'Enter') {
+    if (event.key === 'Enter' || event.key === 'Tab') {
       event.preventDefault();
       event.stopPropagation();
-      runPaletteSelection();
-    }
-  });
-  shadow.querySelector('.backdrop').addEventListener('mousedown', (event) => {
-    event.preventDefault();
-    togglePalette(false);
-  });
-  paletteResults.addEventListener('mousemove', (event) => {
-    const row = event.target.closest('.item');
-    if (!row) return;
-    const index = Number(row.dataset.index);
-    if (index !== paletteIndex) setPaletteIndex(index);
-  });
-  paletteResults.addEventListener('mousedown', (event) => {
-    const row = event.target.closest('.item');
-    if (!row) return;
-    event.preventDefault();
-    paletteIndex = Number(row.dataset.index);
-    runPaletteSelection();
-  });
-  document.documentElement.append(paletteHost);
-}
-
-function togglePalette(force) {
-  if (!paletteHost) createPalette();
-  const open = typeof force === 'boolean' ? force : paletteHost.hidden;
-  paletteHost.hidden = !open;
-  if (!open) {
-    view?.focus();
-    return;
-  }
-  hideCompletion();
-  endSnippet();
-  paletteMode = 'command';
-  paletteIndex = 0;
-  paletteInput.value = '';
-  paletteInput.placeholder = 'Type a command…';
-  renderPalette('');
-  requestAnimationFrame(() => paletteInput.focus());
-}
-
-function onEditorKeyDown(event) {
-  if (!event.target?.closest?.('.cm-content')) return;
-  if (event.key === 'F8') {
-    if (goToProblem(event.shiftKey ? -1 : 1)) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-    return;
-  }
-  if (event.code === 'Space' && (event.ctrlKey || event.metaKey) && !event.altKey) {
-    if (!view) return;
-    event.preventDefault();
-    event.stopPropagation();
-    updateCompletion(true);
-    return;
-  }
-  if (event.key === 'Backspace' || event.key === 'Delete') {
-    requestAnimationFrame(() => updateCompletion());
-    return;
-  }
-  const completionOpen = completionHost && !completionHost.hidden && completionItems.length;
-  if (!completionOpen) {
-    if (event.key === 'Tab' && event.shiftKey) {
-      endSnippet();
+      acceptCompletion();
       return;
     }
-    if (event.key === 'Tab' && advanceSnippet()) {
+    if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
+      hideCompletion();
       return;
     }
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', 'Escape'].includes(event.key)) {
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') {
+      hideCompletion();
       endSnippet();
     }
-    return;
-  }
-  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-    event.preventDefault();
-    event.stopPropagation();
-    setCompletionIndex(completionIndex + (event.key === 'ArrowDown' ? 1 : -1));
-    return;
-  }
-  if (event.key === 'PageDown' || event.key === 'PageUp') {
-    event.preventDefault();
-    event.stopPropagation();
-    setCompletionIndex(completionIndex + (event.key === 'PageDown' ? 5 : -5));
-    return;
-  }
-  if (event.key === 'Enter' || event.key === 'Tab') {
-    event.preventDefault();
-    event.stopPropagation();
-    acceptCompletion();
-    return;
-  }
-  if (event.key === 'Escape') {
-    event.preventDefault();
-    event.stopPropagation();
-    hideCompletion();
-    return;
-  }
-  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') {
-    hideCompletion();
-    endSnippet();
-  }
-}
-
-function refreshEditor(target) {
-  const content = target?.closest?.('.cm-content');
-  const foundView = content?.cmTile?.root?.view;
-  if (!foundView) return null;
-  view = foundView;
-  editorEl = content.closest('.cm-editor');
-  editorContent = content;
-  return content;
-}
-
-function sync() {
-  const found = findEditor();
-  if (!found) {
-    if (host) host.hidden = true;
-    hideCompletion();
-    view = null;
-    editorEl = null;
-    diagnostics = [];
-    lastCheckedText = null;
-    publishDiagnostics();
-    return;
   }
 
-  const editorChanged = found.editor !== editorEl;
-  view = found.view;
-  editorEl = found.editor;
-  editorContent = found.content;
-
-  if (!host) createToolbar();
-  host.hidden = false;
-
-  const nextLanguage = detectLanguage();
-  const languageChanged = nextLanguage !== language;
-  if (editorChanged || languageChanged) {
-    host.__updateLanguage?.(nextLanguage);
-    hideCompletion();
+  function refreshEditor(target) {
+    const content = target?.closest?.('.cm-content');
+    const foundView = content?.cmTile?.root?.view;
+    if (!foundView) return null;
+    view = foundView;
+    editorEl = content.closest('.cm-editor');
+    editorContent = content;
+    return content;
   }
 
-  applySettings(editorChanged);
-  if (state.diagnostics && view) {
-    const text = view.state.doc.toString();
-    if (editorChanged || languageChanged || text !== lastCheckedText) scheduleDiagnostics();
+  function sync() {
+    const found = findEditor();
+    if (!found) {
+      if (host) host.hidden = true;
+      hideCompletion();
+      view = null;
+      editorEl = null;
+      diagnostics = [];
+      lastCheckedText = null;
+      publishDiagnostics();
+      return;
+    }
+
+    const editorChanged = found.editor !== editorEl;
+    view = found.view;
+    editorEl = found.editor;
+    editorContent = found.content;
+
+    if (!host) createToolbar();
+    host.hidden = false;
+
+    const nextLanguage = detectLanguage();
+    const languageChanged = nextLanguage !== language;
+    if (editorChanged || languageChanged) {
+      host.__updateLanguage?.(nextLanguage);
+      hideCompletion();
+    }
+
+    applySettings(editorChanged);
+    if (state.diagnostics && view) {
+      const text = view.state.doc.toString();
+      if (editorChanged || languageChanged || text !== lastCheckedText) scheduleDiagnostics();
+    }
+    if (state.open) syncControls();
   }
-  if (state.open) syncControls();
-}
 
-function afterEditorChange() {
-  updateCompletion();
-  scheduleDiagnostics();
-}
-
-document.addEventListener('input', (event) => {
-  if (event.isComposing) return;
-  if (!refreshEditor(event.target)) return;
-  requestAnimationFrame(afterEditorChange);
-}, true);
-
-document.addEventListener('compositionend', (event) => {
-  if (!refreshEditor(event.target)) return;
-  requestAnimationFrame(afterEditorChange);
-}, true);
-
-document.addEventListener('beforeinput', (event) => {
-  if (event.isComposing) return;
-  if (!refreshEditor(event.target)) return;
-  requestAnimationFrame(afterEditorChange);
-}, true);
-
-document.addEventListener('keyup', (event) => {
-  if (event.isComposing) return;
-  const key = event.key;
-  const undoOrRedo = (event.ctrlKey || event.metaKey) && ['z', 'y'].includes(key.toLowerCase());
-  if (key !== 'Backspace' && key !== 'Delete' && !undoOrRedo) return;
-  if (!refreshEditor(event.target)) return;
-  if (undoOrRedo) endSnippet();
-  requestAnimationFrame(afterEditorChange);
-}, true);
-
-document.addEventListener('focusin', (event) => {
-  if (!refreshEditor(event.target)) return;
-  applySettings(true);
-}, true);
-
-document.addEventListener('mousedown', (event) => {
-  if (event.target?.closest?.('.cm-content')) {
-    hideCompletion();
-    endSnippet();
+  function afterEditorChange() {
+    updateCompletion();
+    scheduleDiagnostics();
   }
-}, true);
 
-window.addEventListener('keydown', (event) => {
-  const mod = event.ctrlKey || event.metaKey;
-  const letter = event.key.toLowerCase();
-  if (mod && event.shiftKey && !event.altKey && letter === 'p') {
-    if (!host || host.hidden) return;
-    event.preventDefault();
-    event.stopPropagation();
-    togglePalette();
-    return;
-  }
-  if (mod && event.shiftKey && !event.altKey && letter === 'e') {
-    if (!host || host.hidden) return;
-    event.preventDefault();
-    togglePanel();
-    return;
-  }
-  if (paletteHost && !paletteHost.hidden) return;
-  onEditorKeyDown(event);
-}, true);
+  document.addEventListener(
+    'input',
+    (event) => {
+      if (event.isComposing) return;
+      if (!refreshEditor(event.target)) return;
+      requestAnimationFrame(afterEditorChange);
+    },
+    true,
+  );
 
-window.addEventListener('resize', repositionOverlays);
-window.addEventListener('scroll', repositionOverlays, true);
-window.addEventListener('blur', hideCompletion);
-document.addEventListener('mousedown', (event) => {
-  if (!completionHost || completionHost.hidden) return;
-  const path = event.composedPath();
-  if (path.includes(completionHost) || path.includes(editorContent)) return;
-  hideCompletion();
-}, true);
+  document.addEventListener(
+    'compositionend',
+    (event) => {
+      if (!refreshEditor(event.target)) return;
+      requestAnimationFrame(afterEditorChange);
+    },
+    true,
+  );
 
-loadSettings();
-sync();
-setInterval(sync, 700);
+  document.addEventListener(
+    'beforeinput',
+    (event) => {
+      if (event.isComposing) return;
+      if (!refreshEditor(event.target)) return;
+      requestAnimationFrame(afterEditorChange);
+    },
+    true,
+  );
+
+  document.addEventListener(
+    'keyup',
+    (event) => {
+      if (event.isComposing) return;
+      const key = event.key;
+      const undoOrRedo = (event.ctrlKey || event.metaKey) && ['z', 'y'].includes(key.toLowerCase());
+      if (key !== 'Backspace' && key !== 'Delete' && !undoOrRedo) return;
+      if (!refreshEditor(event.target)) return;
+      if (undoOrRedo) endSnippet();
+      requestAnimationFrame(afterEditorChange);
+    },
+    true,
+  );
+
+  document.addEventListener(
+    'focusin',
+    (event) => {
+      if (!refreshEditor(event.target)) return;
+      applySettings(true);
+    },
+    true,
+  );
+
+  document.addEventListener(
+    'mousedown',
+    (event) => {
+      if (event.target?.closest?.('.cm-content')) {
+        hideCompletion();
+        endSnippet();
+      }
+    },
+    true,
+  );
+
+  window.addEventListener(
+    'keydown',
+    (event) => {
+      const mod = event.ctrlKey || event.metaKey;
+      const letter = event.key.toLowerCase();
+      if (mod && event.shiftKey && !event.altKey && letter === 'p') {
+        if (!host || host.hidden) return;
+        event.preventDefault();
+        event.stopPropagation();
+        togglePalette();
+        return;
+      }
+      if (mod && event.shiftKey && !event.altKey && letter === 'e') {
+        if (!host || host.hidden) return;
+        event.preventDefault();
+        togglePanel();
+        return;
+      }
+      if (event.code === 'KeyF' && event.shiftKey && event.altKey && !event.ctrlKey && !event.metaKey) {
+        if (!host || host.hidden || !event.target?.closest?.('.cm-content')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        formatDocument();
+        return;
+      }
+      if (paletteHost && !paletteHost.hidden) return;
+      onEditorKeyDown(event);
+    },
+    true,
+  );
+
+  window.addEventListener('resize', repositionOverlays);
+  window.addEventListener('scroll', repositionOverlays, true);
+  window.addEventListener('blur', hideCompletion);
+  document.addEventListener(
+    'mousedown',
+    (event) => {
+      if (!completionHost || completionHost.hidden) return;
+      const path = event.composedPath();
+      if (path.includes(completionHost) || path.includes(editorContent)) return;
+      hideCompletion();
+    },
+    true,
+  );
+
+  loadSettings();
+  sync();
+  setInterval(sync, 700);
 })();

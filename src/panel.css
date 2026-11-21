@@ -1,1 +1,184 @@
-:root{color-scheme:dark}*{box-sizing:border-box}html,body,#app{height:100%;margin:0;overflow:hidden;background:#17191f;color:#e8eaf0;font:13px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.topbar{height:62px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;background:#1d2027;border-bottom:1px solid #303540}.brand{display:flex;align-items:center;gap:11px}.mark{display:grid;place-items:center;width:31px;height:31px;border-radius:9px;background:#e9edf6;color:#202735;font-size:19px;font-weight:800}.brand b{display:block;font-size:13px;letter-spacing:.1px}.brand small{display:block;margin-top:3px;color:#929aaa;font-size:11px}.actions{display:flex;align-items:center;gap:8px}.language-label{font-size:9px;letter-spacing:1px;color:#8d95a4;margin-right:1px}select,button{font:inherit;border-radius:7px;height:32px}select{padding:0 27px 0 10px;color:#e7eaf1;background:#282d36;border:1px solid #3b414d}button{cursor:pointer;border:1px solid transparent;padding:0 11px}.quiet{background:#282d36;color:#d6dbe5;border-color:#3b414d}.apply{background:#e9edf6;color:#202735;font-weight:650}.apply kbd{margin-left:7px;padding:2px 4px;border-radius:4px;background:#d4dbe8;color:#485366;font:10px inherit}.close{width:30px;padding:0;background:transparent;color:#9ca4b2;font-size:21px}.subbar{height:33px;display:flex;align-items:center;gap:8px;padding:0 16px;background:#20242c;border-bottom:1px solid #303540;color:#aab1bf;font-size:11px}.live-dot{width:7px;height:7px;border-radius:50%;background:#55c68d}.live-dot.error{background:#e5a45f}.spacer{flex:1}.text-button{height:25px;background:transparent;color:#9ca5b4;padding:0 7px;font-size:11px}#editor{height:calc(100% - 125px)}footer{height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 15px;background:#1d2027;border-top:1px solid #303540;color:#858e9e;font-size:10px}.settings{position:absolute;right:120px;top:104px;z-index:5;display:grid;gap:12px;padding:14px 16px;background:#252a33;border:1px solid #424957;border-radius:10px;box-shadow:0 12px 36px #0008;color:#cbd1dc}.settings label{display:flex;align-items:center;justify-content:space-between;gap:20px;font-size:12px}.settings input[type=number]{width:55px}.settings select{height:26px}.hidden{display:none}
+:root {
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #17191f;
+  color: #e8eaf0;
+  font:
+    13px Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+}
+.topbar {
+  height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  background: #1d2027;
+  border-bottom: 1px solid #303540;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.mark {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border-radius: 9px;
+  background: #e9edf6;
+  color: #202735;
+  font-size: 19px;
+  font-weight: 800;
+}
+.brand b {
+  display: block;
+  font-size: 13px;
+  letter-spacing: 0.1px;
+}
+.brand small {
+  display: block;
+  margin-top: 3px;
+  color: #929aaa;
+  font-size: 11px;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.language-label {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: #8d95a4;
+  margin-right: 1px;
+}
+select,
+button {
+  font: inherit;
+  border-radius: 7px;
+  height: 32px;
+}
+select {
+  padding: 0 27px 0 10px;
+  color: #e7eaf1;
+  background: #282d36;
+  border: 1px solid #3b414d;
+}
+button {
+  cursor: pointer;
+  border: 1px solid transparent;
+  padding: 0 11px;
+}
+.quiet {
+  background: #282d36;
+  color: #d6dbe5;
+  border-color: #3b414d;
+}
+.apply {
+  background: #e9edf6;
+  color: #202735;
+  font-weight: 650;
+}
+.apply kbd {
+  margin-left: 7px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: #d4dbe8;
+  color: #485366;
+  font: 10px inherit;
+}
+.close {
+  width: 30px;
+  padding: 0;
+  background: transparent;
+  color: #9ca4b2;
+  font-size: 21px;
+}
+.subbar {
+  height: 33px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  background: #20242c;
+  border-bottom: 1px solid #303540;
+  color: #aab1bf;
+  font-size: 11px;
+}
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #55c68d;
+}
+.live-dot.error {
+  background: #e5a45f;
+}
+.spacer {
+  flex: 1;
+}
+.text-button {
+  height: 25px;
+  background: transparent;
+  color: #9ca5b4;
+  padding: 0 7px;
+  font-size: 11px;
+}
+#editor {
+  height: calc(100% - 125px);
+}
+footer {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 15px;
+  background: #1d2027;
+  border-top: 1px solid #303540;
+  color: #858e9e;
+  font-size: 10px;
+}
+.settings {
+  position: absolute;
+  right: 120px;
+  top: 104px;
+  z-index: 5;
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #252a33;
+  border: 1px solid #424957;
+  border-radius: 10px;
+  box-shadow: 0 12px 36px #0008;
+  color: #cbd1dc;
+}
+.settings label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  font-size: 12px;
+}
+.settings input[type='number'] {
+  width: 55px;
+}
+.settings select {
+  height: 26px;
+}
+.hidden {
+  display: none;
+}

@@ -13,6 +13,7 @@ Supports Edabit's eight advertised languages: **C#, C++, Java, JavaScript, PHP, 
 - **Keyboard-first flow**: `↑`/`↓` to navigate, `Tab` or `Enter` to accept, `Esc` to dismiss, `Ctrl+Space` to open suggestions manually.
 - **Command palette** with fuzzy command search, theme and font commands, and go-to-line.
 - **Live error and warning checks**: unbalanced brackets, unterminated strings, missing Python colons, TODO/FIXME comments, trailing whitespace and overly long lines, with inline squiggles and a Problems list.
+- **Format document with Prettier** for JavaScript, using `Shift+Alt+F`, the command palette, or the Editor+ panel.
 - **Smooth typing mode**: animated caret movement and soft active-line transitions.
 - **Language-aware snippets panel** with one-click insertion.
 - **In-place theming**: keep Edabit's theme or switch the editor to a neutral dark theme.
@@ -64,7 +65,19 @@ Then:
 - Press `Ctrl+Shift+E` (`Cmd+Shift+E` on macOS) to toggle the settings panel.
 - Toggle **Smooth typing** in the panel (or from the palette) to animate caret movement.
 - Use `F8` / `Shift+F8` to jump to the next or previous problem. Open the panel to review the full Problems list.
+- Press `Shift+Alt+F` (`Shift+Option+F` on macOS) to format JavaScript with Prettier. The same action is in the command palette and the Editor+ panel.
 - Choose a snippet from the panel to insert it at the cursor, or type a structure name such as `for`, `if`, or `switch` and accept it from the suggestion list.
+
+## Development
+
+Format the project with Prettier:
+
+```bash
+npm run format
+npm run format:check
+```
+
+The in-editor formatter uses Prettier's JavaScript parser. Other Edabit languages still get suggestions and diagnostics, but not Prettier formatting.
 
 ## How it works
 

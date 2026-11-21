@@ -3,34 +3,621 @@ import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 import './panel.css';
 
-self.MonacoEnvironment = { getWorker(_id, label) { return label === 'typescript' || label === 'javascript' ? new tsWorker() : new editorWorker(); } };
+self.MonacoEnvironment = {
+  getWorker(_id, label) {
+    return label === 'typescript' || label === 'javascript' ? new tsWorker() : new editorWorker();
+  },
+};
 const LANGUAGES = {
-  csharp: { label:'C#', monaco:'csharp', snippets:[['prop','public ${1:string} ${2:Name} { get; set; }','Auto-property'],['foreach','foreach (var ${1:item} in ${2:items})\n{\n    $0\n}','Foreach loop'],['for','for (int ${1:i} = 0; ${1:i} < ${2:length}; ${1:i}++)\n{\n    $0\n}','For loop'],['linq','var ${1:result} = ${2:items}.Where(x => ${3:condition}).ToList();','$ LINQ query'],['ctor','public ${1:ClassName}(${2:parameters})\n{\n    $0\n}','Constructor']],
-    words:['Console','WriteLine','ReadLine','Math','Abs','Max','Min','Pow','Sqrt','string','String','int','double','decimal','bool','List','Dictionary','Array','Enumerable','Where','Select','FirstOrDefault','ToList','Length','Count','Contains','Split','Join','Substring','Replace','ToUpper','ToLower','TryParse','Parse','Program','return','public','private','static','class','var','new','foreach','for','while','if','else','switch','using','namespace'] },
-  cpp: { label:'C++', monaco:'cpp', snippets:[['main','int main() {\n    $0\n    return 0;\n}','Main function'],['cout','cout << ${1:value} << endl;','Print to console'],['for','for (int ${1:i} = 0; ${1:i} < ${2:n}; ++${1:i}) {\n    $0\n}','For loop'],['vector','vector<${1:int}> ${2:values};','Vector declaration']], words:['cout','cin','endl','string','vector','map','set','unordered_map','sort','reverse','find','max','min','abs','sqrt','size','length','push_back','pop_back','begin','end','return','int','long','double','bool','char','auto','const','void','for','while','if','else','include','std'] },
-  java: { label:'Java', monaco:'java', snippets:[['sout','System.out.println(${1:value});','Print line'],['main','public static void main(String[] args) {\n    $0\n}','Main method'],['foreach','for (${1:String} ${2:item} : ${3:items}) {\n    $0\n}','Enhanced for loop'],['stream','${1:list}.stream().filter(${2:x -> condition}).toList();','Stream filter']], words:['System','out','println','print','String','Integer','Math','Arrays','ArrayList','List','Map','HashMap','Set','Collections','stream','filter','map','collect','toList','length','size','equals','substring','contains','charAt','parseInt','return','public','private','static','class','new','this','if','else','for','while'] },
-  javascript: { label:'JavaScript', monaco:'javascript', snippets:[['func','function ${1:name}(${2:args}) {\n    $0\n}','Function'],['arrow','const ${1:name} = (${2:args}) => {\n    $0\n};','Arrow function'],['map','${1:array}.map((${2:item}) => ${3:item});','Array map'],['filter','${1:array}.filter((${2:item}) => ${3:condition});','Array filter'],['reduce','${1:array}.reduce((${2:acc}, ${3:item}) => ${4:acc}, ${5:initial});','Array reduce'],['foreach','for (const ${1:item} of ${2:items}) {\n    $0\n}','For...of loop']], words:['Array','Object','String','Number','Math','JSON','Map','Set','Promise','Date','RegExp','console','log','parseInt','parseFloat','isNaN','isArray','from','keys','values','entries','map','filter','reduce','find','findIndex','some','every','includes','slice','splice','sort','reverse','join','split','length','push','pop','shift','unshift','toString','toUpperCase','toLowerCase','trim','return','const','let','var','function','class','new','this','async','await','if','else','for','while'] },
-  php: { label:'PHP', monaco:'php', snippets:[['func','function ${1:name}(${2:args}) {\n    $0\n}','Function'],['foreach','foreach (${1:$items} as ${2:$item}) {\n    $0\n}','Foreach loop'],['echo','echo ${1:$value};','Echo'],['array','$${1:items} = [${2}];','Array']], words:['echo','print_r','var_dump','count','strlen','substr','str_replace','explode','implode','array_map','array_filter','array_reduce','in_array','array_keys','array_values','sort','rsort','max','min','abs','round','floor','ceil','intval','floatval','is_string','is_array','empty','isset','function','return','foreach','as','if','else','elseif','while','for','class','public','private','static','new'] },
-  python: { label:'Python', monaco:'python', snippets:[['def','def ${1:function_name}(${2:args}):\n    $0','Function'],['class','class ${1:ClassName}:\n    def __init__(self${2:, args}):\n        $0','Class'],['for','for ${1:item} in ${2:items}:\n    $0','For loop'],['listcomp','[${1:expression} for ${2:item} in ${3:items}]','List comprehension'],['ifmain','if __name__ == "__main__":\n    $0','Main guard']], words:['print','len','range','enumerate','zip','map','filter','sum','min','max','sorted','reversed','abs','round','all','any','int','float','str','bool','list','dict','set','tuple','type','isinstance','append','extend','pop','sort','split','join','strip','replace','lower','upper','find','index','keys','values','items','get','return','def','class','self','lambda','yield','import','from','as','if','elif','else','for','while','try','except','finally','with','pass','break','continue'] },
-  ruby: { label:'Ruby', monaco:'ruby', snippets:[['def','def ${1:name}(${2:args})\n  $0\nend','Method'],['each','${1:items}.each do |${2:item}|\n  $0\nend','Each block'],['map','${1:items}.map { |${2:item}| ${3:expression} }','Map'],['class','class ${1:ClassName}\n  $0\nend','Class']], words:['puts','print','p','Array','Hash','String','Integer','Float','Math','each','map','select','reject','reduce','inject','find','any?','all?','include?','length','size','count','first','last','sort','reverse','join','split','to_i','to_f','to_s','upcase','downcase','strip','nil?','empty?','new','return','def','end','class','module','if','elsif','else','unless','while','until','do','begin','rescue'] },
-  swift: { label:'Swift', monaco:'swift', snippets:[['func','func ${1:name}(${2:args}) -> ${3:ReturnType} {\n    $0\n}','Function'],['guard','guard let ${1:value} = ${2:optional} else {\n    return\n}\n$0','Guard statement'],['foreach','for ${1:item} in ${2:items} {\n    $0\n}','For-in loop'],['struct','struct ${1:Name} {\n    $0\n}','Struct']], words:['print','String','Int','Double','Bool','Array','Dictionary','Set','Optional','Result','abs','max','min','sorted','reversed','map','filter','reduce','compactMap','flatMap','contains','count','isEmpty','append','remove','joined','split','uppercased','lowercased','first','last','return','func','let','var','struct','class','enum','protocol','extension','guard','if','else','switch','case','for','while','in','self','nil'] }
+  csharp: {
+    label: 'C#',
+    monaco: 'csharp',
+    snippets: [
+      ['prop', 'public ${1:string} ${2:Name} { get; set; }', 'Auto-property'],
+      ['foreach', 'foreach (var ${1:item} in ${2:items})\n{\n    $0\n}', 'Foreach loop'],
+      ['for', 'for (int ${1:i} = 0; ${1:i} < ${2:length}; ${1:i}++)\n{\n    $0\n}', 'For loop'],
+      ['linq', 'var ${1:result} = ${2:items}.Where(x => ${3:condition}).ToList();', '$ LINQ query'],
+      ['ctor', 'public ${1:ClassName}(${2:parameters})\n{\n    $0\n}', 'Constructor'],
+    ],
+    words: [
+      'Console',
+      'WriteLine',
+      'ReadLine',
+      'Math',
+      'Abs',
+      'Max',
+      'Min',
+      'Pow',
+      'Sqrt',
+      'string',
+      'String',
+      'int',
+      'double',
+      'decimal',
+      'bool',
+      'List',
+      'Dictionary',
+      'Array',
+      'Enumerable',
+      'Where',
+      'Select',
+      'FirstOrDefault',
+      'ToList',
+      'Length',
+      'Count',
+      'Contains',
+      'Split',
+      'Join',
+      'Substring',
+      'Replace',
+      'ToUpper',
+      'ToLower',
+      'TryParse',
+      'Parse',
+      'Program',
+      'return',
+      'public',
+      'private',
+      'static',
+      'class',
+      'var',
+      'new',
+      'foreach',
+      'for',
+      'while',
+      'if',
+      'else',
+      'switch',
+      'using',
+      'namespace',
+    ],
+  },
+  cpp: {
+    label: 'C++',
+    monaco: 'cpp',
+    snippets: [
+      ['main', 'int main() {\n    $0\n    return 0;\n}', 'Main function'],
+      ['cout', 'cout << ${1:value} << endl;', 'Print to console'],
+      ['for', 'for (int ${1:i} = 0; ${1:i} < ${2:n}; ++${1:i}) {\n    $0\n}', 'For loop'],
+      ['vector', 'vector<${1:int}> ${2:values};', 'Vector declaration'],
+    ],
+    words: [
+      'cout',
+      'cin',
+      'endl',
+      'string',
+      'vector',
+      'map',
+      'set',
+      'unordered_map',
+      'sort',
+      'reverse',
+      'find',
+      'max',
+      'min',
+      'abs',
+      'sqrt',
+      'size',
+      'length',
+      'push_back',
+      'pop_back',
+      'begin',
+      'end',
+      'return',
+      'int',
+      'long',
+      'double',
+      'bool',
+      'char',
+      'auto',
+      'const',
+      'void',
+      'for',
+      'while',
+      'if',
+      'else',
+      'include',
+      'std',
+    ],
+  },
+  java: {
+    label: 'Java',
+    monaco: 'java',
+    snippets: [
+      ['sout', 'System.out.println(${1:value});', 'Print line'],
+      ['main', 'public static void main(String[] args) {\n    $0\n}', 'Main method'],
+      ['foreach', 'for (${1:String} ${2:item} : ${3:items}) {\n    $0\n}', 'Enhanced for loop'],
+      ['stream', '${1:list}.stream().filter(${2:x -> condition}).toList();', 'Stream filter'],
+    ],
+    words: [
+      'System',
+      'out',
+      'println',
+      'print',
+      'String',
+      'Integer',
+      'Math',
+      'Arrays',
+      'ArrayList',
+      'List',
+      'Map',
+      'HashMap',
+      'Set',
+      'Collections',
+      'stream',
+      'filter',
+      'map',
+      'collect',
+      'toList',
+      'length',
+      'size',
+      'equals',
+      'substring',
+      'contains',
+      'charAt',
+      'parseInt',
+      'return',
+      'public',
+      'private',
+      'static',
+      'class',
+      'new',
+      'this',
+      'if',
+      'else',
+      'for',
+      'while',
+    ],
+  },
+  javascript: {
+    label: 'JavaScript',
+    monaco: 'javascript',
+    snippets: [
+      ['func', 'function ${1:name}(${2:args}) {\n    $0\n}', 'Function'],
+      ['arrow', 'const ${1:name} = (${2:args}) => {\n    $0\n};', 'Arrow function'],
+      ['map', '${1:array}.map((${2:item}) => ${3:item});', 'Array map'],
+      ['filter', '${1:array}.filter((${2:item}) => ${3:condition});', 'Array filter'],
+      ['reduce', '${1:array}.reduce((${2:acc}, ${3:item}) => ${4:acc}, ${5:initial});', 'Array reduce'],
+      ['foreach', 'for (const ${1:item} of ${2:items}) {\n    $0\n}', 'For...of loop'],
+    ],
+    words: [
+      'Array',
+      'Object',
+      'String',
+      'Number',
+      'Math',
+      'JSON',
+      'Map',
+      'Set',
+      'Promise',
+      'Date',
+      'RegExp',
+      'console',
+      'log',
+      'parseInt',
+      'parseFloat',
+      'isNaN',
+      'isArray',
+      'from',
+      'keys',
+      'values',
+      'entries',
+      'map',
+      'filter',
+      'reduce',
+      'find',
+      'findIndex',
+      'some',
+      'every',
+      'includes',
+      'slice',
+      'splice',
+      'sort',
+      'reverse',
+      'join',
+      'split',
+      'length',
+      'push',
+      'pop',
+      'shift',
+      'unshift',
+      'toString',
+      'toUpperCase',
+      'toLowerCase',
+      'trim',
+      'return',
+      'const',
+      'let',
+      'var',
+      'function',
+      'class',
+      'new',
+      'this',
+      'async',
+      'await',
+      'if',
+      'else',
+      'for',
+      'while',
+    ],
+  },
+  php: {
+    label: 'PHP',
+    monaco: 'php',
+    snippets: [
+      ['func', 'function ${1:name}(${2:args}) {\n    $0\n}', 'Function'],
+      ['foreach', 'foreach (${1:$items} as ${2:$item}) {\n    $0\n}', 'Foreach loop'],
+      ['echo', 'echo ${1:$value};', 'Echo'],
+      ['array', '$${1:items} = [${2}];', 'Array'],
+    ],
+    words: [
+      'echo',
+      'print_r',
+      'var_dump',
+      'count',
+      'strlen',
+      'substr',
+      'str_replace',
+      'explode',
+      'implode',
+      'array_map',
+      'array_filter',
+      'array_reduce',
+      'in_array',
+      'array_keys',
+      'array_values',
+      'sort',
+      'rsort',
+      'max',
+      'min',
+      'abs',
+      'round',
+      'floor',
+      'ceil',
+      'intval',
+      'floatval',
+      'is_string',
+      'is_array',
+      'empty',
+      'isset',
+      'function',
+      'return',
+      'foreach',
+      'as',
+      'if',
+      'else',
+      'elseif',
+      'while',
+      'for',
+      'class',
+      'public',
+      'private',
+      'static',
+      'new',
+    ],
+  },
+  python: {
+    label: 'Python',
+    monaco: 'python',
+    snippets: [
+      ['def', 'def ${1:function_name}(${2:args}):\n    $0', 'Function'],
+      ['class', 'class ${1:ClassName}:\n    def __init__(self${2:, args}):\n        $0', 'Class'],
+      ['for', 'for ${1:item} in ${2:items}:\n    $0', 'For loop'],
+      ['listcomp', '[${1:expression} for ${2:item} in ${3:items}]', 'List comprehension'],
+      ['ifmain', 'if __name__ == "__main__":\n    $0', 'Main guard'],
+    ],
+    words: [
+      'print',
+      'len',
+      'range',
+      'enumerate',
+      'zip',
+      'map',
+      'filter',
+      'sum',
+      'min',
+      'max',
+      'sorted',
+      'reversed',
+      'abs',
+      'round',
+      'all',
+      'any',
+      'int',
+      'float',
+      'str',
+      'bool',
+      'list',
+      'dict',
+      'set',
+      'tuple',
+      'type',
+      'isinstance',
+      'append',
+      'extend',
+      'pop',
+      'sort',
+      'split',
+      'join',
+      'strip',
+      'replace',
+      'lower',
+      'upper',
+      'find',
+      'index',
+      'keys',
+      'values',
+      'items',
+      'get',
+      'return',
+      'def',
+      'class',
+      'self',
+      'lambda',
+      'yield',
+      'import',
+      'from',
+      'as',
+      'if',
+      'elif',
+      'else',
+      'for',
+      'while',
+      'try',
+      'except',
+      'finally',
+      'with',
+      'pass',
+      'break',
+      'continue',
+    ],
+  },
+  ruby: {
+    label: 'Ruby',
+    monaco: 'ruby',
+    snippets: [
+      ['def', 'def ${1:name}(${2:args})\n  $0\nend', 'Method'],
+      ['each', '${1:items}.each do |${2:item}|\n  $0\nend', 'Each block'],
+      ['map', '${1:items}.map { |${2:item}| ${3:expression} }', 'Map'],
+      ['class', 'class ${1:ClassName}\n  $0\nend', 'Class'],
+    ],
+    words: [
+      'puts',
+      'print',
+      'p',
+      'Array',
+      'Hash',
+      'String',
+      'Integer',
+      'Float',
+      'Math',
+      'each',
+      'map',
+      'select',
+      'reject',
+      'reduce',
+      'inject',
+      'find',
+      'any?',
+      'all?',
+      'include?',
+      'length',
+      'size',
+      'count',
+      'first',
+      'last',
+      'sort',
+      'reverse',
+      'join',
+      'split',
+      'to_i',
+      'to_f',
+      'to_s',
+      'upcase',
+      'downcase',
+      'strip',
+      'nil?',
+      'empty?',
+      'new',
+      'return',
+      'def',
+      'end',
+      'class',
+      'module',
+      'if',
+      'elsif',
+      'else',
+      'unless',
+      'while',
+      'until',
+      'do',
+      'begin',
+      'rescue',
+    ],
+  },
+  swift: {
+    label: 'Swift',
+    monaco: 'swift',
+    snippets: [
+      ['func', 'func ${1:name}(${2:args}) -> ${3:ReturnType} {\n    $0\n}', 'Function'],
+      ['guard', 'guard let ${1:value} = ${2:optional} else {\n    return\n}\n$0', 'Guard statement'],
+      ['foreach', 'for ${1:item} in ${2:items} {\n    $0\n}', 'For-in loop'],
+      ['struct', 'struct ${1:Name} {\n    $0\n}', 'Struct'],
+    ],
+    words: [
+      'print',
+      'String',
+      'Int',
+      'Double',
+      'Bool',
+      'Array',
+      'Dictionary',
+      'Set',
+      'Optional',
+      'Result',
+      'abs',
+      'max',
+      'min',
+      'sorted',
+      'reversed',
+      'map',
+      'filter',
+      'reduce',
+      'compactMap',
+      'flatMap',
+      'contains',
+      'count',
+      'isEmpty',
+      'append',
+      'remove',
+      'joined',
+      'split',
+      'uppercased',
+      'lowercased',
+      'first',
+      'last',
+      'return',
+      'func',
+      'let',
+      'var',
+      'struct',
+      'class',
+      'enum',
+      'protocol',
+      'extension',
+      'guard',
+      'if',
+      'else',
+      'switch',
+      'case',
+      'for',
+      'while',
+      'in',
+      'self',
+      'nil',
+    ],
+  },
 };
 const root = document.querySelector('#app');
-root.innerHTML = `<header class="topbar"><div class="brand"><span class="mark">e</span><div><b>Edabit IDE</b><small>Enhanced challenge workspace</small></div></div><div class="actions"><span class="language-label">LANGUAGE</span><select id="language" aria-label="Challenge language">${Object.entries(LANGUAGES).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('')}</select><button id="sync" class="quiet" title="Reload code from Edabit">↻ Sync</button><button id="apply" class="apply">Apply to Edabit <kbd>⌘↵</kbd></button><button id="close" class="close" title="Close">×</button></div></header><div class="subbar"><span class="live-dot"></span><span id="status">Ready · JavaScript IntelliSense enabled</span><span class="spacer"></span><button id="format" class="text-button">Format</button><button id="settings" class="text-button">Settings</button></div><main id="editor"></main><footer><span>Local workspace · No code leaves your browser</span><span id="cursor">Ln 1, Col 1</span></footer><div id="settings-pop" class="settings hidden"><label>Font size <input id="font-size" type="number" min="11" max="24" value="14"></label><label>Tab size <select id="tab-size"><option>2</option><option selected>4</option><option>8</option></select></label><label><input id="minimap" type="checkbox"> Show minimap</label><label><input id="wordwrap" type="checkbox" checked> Word wrap</label></div>`;
-const editor = monaco.editor.create(document.querySelector('#editor'), { value:'// Click ↻ Sync to load your Edabit solution.\n', language:'javascript', theme:'vs-dark', automaticLayout:true, minimap:{enabled:false}, fontSize:14, fontFamily:'JetBrains Mono, SFMono-Regular, Menlo, monospace', lineNumbers:'on', scrollBeyondLastLine:false, tabSize:4, wordWrap:'on', suggestOnTriggerCharacters:true, quickSuggestions:{other:true,comments:false,strings:true}, parameterHints:{enabled:true}, bracketPairColorization:{enabled:true}, folding:true, padding:{top:16,bottom:16}, smoothScrolling:true, cursorBlinking:'smooth', renderLineHighlight:'all' });
-const langSelect=document.querySelector('#language'), status=document.querySelector('#status');
-const wordCache=new Map();
-function registerLanguageSupport(key){ const cfg=LANGUAGES[key]; if(!cfg)return; monaco.languages.registerCompletionItemProvider(cfg.monaco,{triggerCharacters:['.'],provideCompletionItems(model,pos){const word=model.getWordUntilPosition(pos);const range={startLineNumber:pos.lineNumber,endLineNumber:pos.lineNumber,startColumn:word.startColumn,endColumn:word.endColumn};const prefix=word.word.toLowerCase();const suggestions=cfg.words.filter(w=>!prefix||w.toLowerCase().startsWith(prefix)).map(w=>({label:w,kind:monaco.languages.CompletionItemKind.Text,insertText:w,range,detail:`${cfg.label} completion`}));const snippets=cfg.snippets.filter(s=>!prefix||s[0].toLowerCase().startsWith(prefix)).map(s=>({label:s[0],kind:monaco.languages.CompletionItemKind.Snippet,insertText:s[1],insertTextRules:monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,documentation:s[2],range,detail:`${cfg.label} snippet`}));return {suggestions:[...snippets,...suggestions]};}}); }
+root.innerHTML = `<header class="topbar"><div class="brand"><span class="mark">e</span><div><b>Edabit IDE</b><small>Enhanced challenge workspace</small></div></div><div class="actions"><span class="language-label">LANGUAGE</span><select id="language" aria-label="Challenge language">${Object.entries(
+  LANGUAGES,
+)
+  .map(([k, v]) => `<option value="${k}">${v.label}</option>`)
+  .join(
+    '',
+  )}</select><button id="sync" class="quiet" title="Reload code from Edabit">↻ Sync</button><button id="apply" class="apply">Apply to Edabit <kbd>⌘↵</kbd></button><button id="close" class="close" title="Close">×</button></div></header><div class="subbar"><span class="live-dot"></span><span id="status">Ready · JavaScript IntelliSense enabled</span><span class="spacer"></span><button id="format" class="text-button">Format</button><button id="settings" class="text-button">Settings</button></div><main id="editor"></main><footer><span>Local workspace · No code leaves your browser</span><span id="cursor">Ln 1, Col 1</span></footer><div id="settings-pop" class="settings hidden"><label>Font size <input id="font-size" type="number" min="11" max="24" value="14"></label><label>Tab size <select id="tab-size"><option>2</option><option selected>4</option><option>8</option></select></label><label><input id="minimap" type="checkbox"> Show minimap</label><label><input id="wordwrap" type="checkbox" checked> Word wrap</label></div>`;
+const editor = monaco.editor.create(document.querySelector('#editor'), {
+  value: '// Click ↻ Sync to load your Edabit solution.\n',
+  language: 'javascript',
+  theme: 'vs-dark',
+  automaticLayout: true,
+  minimap: { enabled: false },
+  fontSize: 14,
+  fontFamily: 'JetBrains Mono, SFMono-Regular, Menlo, monospace',
+  lineNumbers: 'on',
+  scrollBeyondLastLine: false,
+  tabSize: 4,
+  wordWrap: 'on',
+  suggestOnTriggerCharacters: true,
+  quickSuggestions: { other: true, comments: false, strings: true },
+  parameterHints: { enabled: true },
+  bracketPairColorization: { enabled: true },
+  folding: true,
+  padding: { top: 16, bottom: 16 },
+  smoothScrolling: true,
+  cursorBlinking: 'smooth',
+  renderLineHighlight: 'all',
+});
+const langSelect = document.querySelector('#language'),
+  status = document.querySelector('#status');
+const wordCache = new Map();
+function registerLanguageSupport(key) {
+  const cfg = LANGUAGES[key];
+  if (!cfg) return;
+  monaco.languages.registerCompletionItemProvider(cfg.monaco, {
+    triggerCharacters: ['.'],
+    provideCompletionItems(model, pos) {
+      const word = model.getWordUntilPosition(pos);
+      const range = {
+        startLineNumber: pos.lineNumber,
+        endLineNumber: pos.lineNumber,
+        startColumn: word.startColumn,
+        endColumn: word.endColumn,
+      };
+      const prefix = word.word.toLowerCase();
+      const suggestions = cfg.words
+        .filter((w) => !prefix || w.toLowerCase().startsWith(prefix))
+        .map((w) => ({
+          label: w,
+          kind: monaco.languages.CompletionItemKind.Text,
+          insertText: w,
+          range,
+          detail: `${cfg.label} completion`,
+        }));
+      const snippets = cfg.snippets
+        .filter((s) => !prefix || s[0].toLowerCase().startsWith(prefix))
+        .map((s) => ({
+          label: s[0],
+          kind: monaco.languages.CompletionItemKind.Snippet,
+          insertText: s[1],
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          documentation: s[2],
+          range,
+          detail: `${cfg.label} snippet`,
+        }));
+      return { suggestions: [...snippets, ...suggestions] };
+    },
+  });
+}
 Object.keys(LANGUAGES).forEach(registerLanguageSupport);
-function setStatus(msg,error=false){status.textContent=msg;document.querySelector('.live-dot').classList.toggle('error',error)}
-function setLanguage(key){const cfg=LANGUAGES[key]||LANGUAGES.javascript;langSelect.value=key in LANGUAGES?key:'javascript';monaco.editor.setModelLanguage(editor.getModel(),cfg.monaco);const note=key==='javascript'?'JavaScript IntelliSense enabled':key==='csharp'?'C# syntax + contextual completions · Roslyn server not connected':`${cfg.label} syntax + contextual completions`;setStatus(note)}
-function post(type,payload={}){parent.postMessage({source:'edabit-ide',type,...payload},'https://edabit.com')}
-function apply(){post('APPLY_CODE',{code:editor.getValue()});setStatus('Code sent to Edabit · verify the page editor before submitting')}
-editor.addCommand(monaco.KeyMod.CtrlCmd|monaco.KeyCode.Enter,apply);
-editor.addCommand(monaco.KeyMod.CtrlCmd|monaco.KeyCode.KEY_S,apply);
-editor.onDidChangeCursorPosition(({position:p})=>document.querySelector('#cursor').textContent=`Ln ${p.lineNumber}, Col ${p.column}`);
-langSelect.addEventListener('change',e=>setLanguage(e.target.value));document.querySelector('#apply').onclick=apply;document.querySelector('#sync').onclick=()=>post('REQUEST_CODE');document.querySelector('#close').onclick=()=>post('CLOSE');document.querySelector('#format').onclick=()=>editor.getAction('editor.action.formatDocument')?.run();
-document.querySelector('#settings').onclick=()=>document.querySelector('#settings-pop').classList.toggle('hidden');
-document.querySelector('#font-size').onchange=e=>editor.updateOptions({fontSize:Math.max(11,Math.min(24,+e.target.value||14))});document.querySelector('#tab-size').onchange=e=>editor.updateOptions({tabSize:+e.target.value});document.querySelector('#minimap').onchange=e=>editor.updateOptions({minimap:{enabled:e.target.checked}});document.querySelector('#wordwrap').onchange=e=>editor.updateOptions({wordWrap:e.target.checked?'on':'off'});
-window.addEventListener('message',e=>{if(e.source!==parent||e.data?.source!=='edabit-ide-host')return;const d=e.data;if(d.type==='CODE'){editor.setValue(d.code??'');setLanguage(d.language||'javascript');setStatus('Loaded code from Edabit')}if(d.type==='ERROR')setStatus(d.message||'Could not communicate with Edabit editor',true)});
+function setStatus(msg, error = false) {
+  status.textContent = msg;
+  document.querySelector('.live-dot').classList.toggle('error', error);
+}
+function setLanguage(key) {
+  const cfg = LANGUAGES[key] || LANGUAGES.javascript;
+  langSelect.value = key in LANGUAGES ? key : 'javascript';
+  monaco.editor.setModelLanguage(editor.getModel(), cfg.monaco);
+  const note =
+    key === 'javascript'
+      ? 'JavaScript IntelliSense enabled'
+      : key === 'csharp'
+        ? 'C# syntax + contextual completions · Roslyn server not connected'
+        : `${cfg.label} syntax + contextual completions`;
+  setStatus(note);
+}
+function post(type, payload = {}) {
+  parent.postMessage({ source: 'edabit-ide', type, ...payload }, 'https://edabit.com');
+}
+function apply() {
+  post('APPLY_CODE', { code: editor.getValue() });
+  setStatus('Code sent to Edabit · verify the page editor before submitting');
+}
+editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, apply);
+editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KEY_S, apply);
+editor.onDidChangeCursorPosition(
+  ({ position: p }) => (document.querySelector('#cursor').textContent = `Ln ${p.lineNumber}, Col ${p.column}`),
+);
+langSelect.addEventListener('change', (e) => setLanguage(e.target.value));
+document.querySelector('#apply').onclick = apply;
+document.querySelector('#sync').onclick = () => post('REQUEST_CODE');
+document.querySelector('#close').onclick = () => post('CLOSE');
+document.querySelector('#format').onclick = () => editor.getAction('editor.action.formatDocument')?.run();
+document.querySelector('#settings').onclick = () => document.querySelector('#settings-pop').classList.toggle('hidden');
+document.querySelector('#font-size').onchange = (e) =>
+  editor.updateOptions({ fontSize: Math.max(11, Math.min(24, +e.target.value || 14)) });
+document.querySelector('#tab-size').onchange = (e) => editor.updateOptions({ tabSize: +e.target.value });
+document.querySelector('#minimap').onchange = (e) => editor.updateOptions({ minimap: { enabled: e.target.checked } });
+document.querySelector('#wordwrap').onchange = (e) =>
+  editor.updateOptions({ wordWrap: e.target.checked ? 'on' : 'off' });
+window.addEventListener('message', (e) => {
+  if (e.source !== parent || e.data?.source !== 'edabit-ide-host') return;
+  const d = e.data;
+  if (d.type === 'CODE') {
+    editor.setValue(d.code ?? '');
+    setLanguage(d.language || 'javascript');
+    setStatus('Loaded code from Edabit');
+  }
+  if (d.type === 'ERROR') setStatus(d.message || 'Could not communicate with Edabit editor', true);
+});
 post('REQUEST_CODE');

@@ -2,13 +2,15 @@
   "manifest_version": 3,
   "name": "Edabit IDE — Enhanced Editor",
   "version": "1.0.0",
-  "description": "VS Code-style completions, structural snippets, live error checking, theming, and smooth typing for Edabit's built-in editor.",
+  "description": "VS Code-style completions, structural snippets, live error checking, Prettier formatting, theming, and smooth typing for Edabit's built-in editor.",
   "host_permissions": ["https://edabit.com/*"],
-  "content_scripts": [{
-    "matches": ["https://edabit.com/*"],
-    "js": ["dist/content.js"],
-    "css": ["dist/content.css"],
-    "run_at": "document_idle",
-    "world": "MAIN"
-  }]
+  "content_scripts": [
+    {
+      "matches": ["https://edabit.com/*"],
+      "js": ["dist/content.js"],
+      "css": ["dist/content.css"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    }
+  ]
 }
